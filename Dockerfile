@@ -28,7 +28,6 @@ RUN poetry install --no-root --only=main
 COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini ./
-RUN poetry install --only-root
 
 
 # ───── runtime ─────────────────────────────────────────────────────
