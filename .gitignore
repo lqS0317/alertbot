@@ -17,6 +17,10 @@ env/
 # Poetry
 poetry.lock.bak
 
+# Local AI/Spec Kit workspace metadata
+.cursor/
+.specify/
+
 # Test / coverage
 .pytest_cache/
 .coverage
