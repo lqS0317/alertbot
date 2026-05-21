@@ -1,0 +1,45 @@
+# Production values for AlertBot.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/alertbot
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: alertbot.hashkeychain.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts: [alertbot.hashkeychain.net]
+      secretName: alertbot-prod-tls
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+config:
+  lark:
+    group_chat_id: "oc_prod_group_replace_me"
+    meta_channel_id: "oc_prod_meta_replace_me"
+  alertmanager:
+    base_url: "http://alertmanager.observability.svc.cluster.local:9093"
+  oncall:
+    static_service_map: {}
+
+secrets:
+  larkAppSecret: "LARK_APP_SECRET"
+  larkEncryptKey: "LARK_ENCRYPT_KEY"
+  larkVerifyToken: "LARK_VERIFY_TOKEN"
+  fdWebhookSecret: "FD_WEBHOOK_SECRET"
+  fdApiToken: "FD_API_TOKEN"
+  amToken: "AM_TOKEN"
+  databaseUrl: "DATABASE_URL"

@@ -1,0 +1,16 @@
+{
+  "event_id": "fd-evt-7c3a91-099",
+  "event_type": "incident.closed",
+  "timestamp": 1746604834,
+  "incident": {
+    "fingerprint": "alertname=HighCPU,instance=web-01",
+    "service": "payment-api",
+    "severity": "critical",
+    "summary": "CPU > 95% for 5m on web-01",
+    "labels": {
+      "alertname": "HighCPU",
+      "instance": "web-01"
+    },
+    "started_at": "2026-05-07T08:00:00Z"
+  }
+}

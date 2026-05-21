@@ -1,0 +1,52 @@
+# config/example.yaml — 文档化的 AlertBot 配置范例
+#
+# 真正运行时不要直接用这份文件 — 复制到 config/local.yaml 并填入真值。
+# 所有 *_env 字段是 secret 引用：值通过环境变量注入（Vault / Sealed Secret 在 K8s 注入），
+# secret 本身永远不进 ConfigMap、不进镜像、不进日志（Constitution Security Requirements）。
+
+lark:
+  app_id: "cli_xxxxxxxxxxxxxxxx"
+  app_secret_env: "LARK_APP_SECRET"
+  encrypt_key_env: "LARK_ENCRYPT_KEY"
+  verification_token_env: "LARK_VERIFY_TOKEN"
+  group_chat_id: "oc_xxxxxxxxxxxxxxxx"        # 收告警卡片的群
+  meta_channel_id: "oc_yyyyyyyyyyyyyyyy"      # 收运维异常上报的群（CP-VI）
+
+flashduty:
+  webhook_secret_env: "FD_WEBHOOK_SECRET"
+  schedule_api_base: "https://api.flashcat.cloud/api/v1"
+  schedule_api_token_env: "FD_API_TOKEN"
+
+alertmanager:
+  base_url: "http://localhost:9093"
+  service_account_token_env: "AM_TOKEN"
+  request_timeout_seconds: 5                  # outbound 默认 5s（Constitution Security）
+
+oncall:
+  # D 方案 4 层优先级链：先匹配的赢
+  priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+  # 静态兜底映射 service → 邮箱
+  static_service_map:
+    payment-api: "alice@company.com"
+    auth-svc:    "bob@company.com"
+  # 顶层兜底（前三层都没出结果时 @ 这个角色）
+  fallback_role: "@on-call"
+  # FlashDuty schedule 缓存 TTL（FR-013 + Constitution I 例外，硬上限 300s）
+  schedule_cache_ttl_seconds: 300
+
+# severity → Lark 卡片 title-bar 颜色（FR-006）
+severity_colors:
+  critical: red
+  warning:  orange
+  info:     blue
+
+# 静默时长按钮配置（FR-008）
+silence_buttons:
+  fixed_durations: [5min, 30min, 1h, 4h, 24h]
+  enable_custom: true
+
+# 卡片时间显示用的 IANA 时区
+timezone: "Asia/Shanghai"
+
+# 24h 是硬上限（FR-017 / SC-008）；改大会被 Pydantic schema 拒绝。
+max_silence_hours: 24

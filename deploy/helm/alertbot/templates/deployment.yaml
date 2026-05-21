@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "alertbot.fullname" . }}
+  labels: {{- include "alertbot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "alertbot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "alertbot.selectorLabels" . | nindent 8 }}
+      annotations:
+        # 配置变更触发滚动重启（虽然 app 自身支持热重载，但 ConfigMap 投影 +
+        # AlertBot 进程同步更新还是更可靠）
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name | default (include "alertbot.fullname" .) }}
+      containers:
+        - name: alertbot
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+          env:
+            - name: ALERTBOT_CONFIG
+              value: {{ .Values.env.ALERTBOT_CONFIG | quote }}
+            # secret 引用：每个 *_env 字段对应一个环境变量名，从 SealedSecret 注入
+            {{- range $logical, $envName := .Values.secrets }}
+            - name: {{ $envName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "alertbot.fullname" $ }}-secrets
+                  key: {{ $logical }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertbot
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "alertbot.fullname" . }}-config
+            items:
+              - key: config.yaml
+                path: config.yaml

@@ -3,6 +3,27 @@ alwaysApply: true
 ---
 
 <!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+Active feature: **001-alertbot-core**
+
+Authoritative project documents (read these before any code change in `app/` or `tests/`):
+
+- Constitution: `.specify/memory/constitution.md` (v1.0.0, ratified 2026-05-07)
+- Spec: `specs/001-alertbot-core/spec.md` (v1.1, all clarifications resolved)
+- **Plan**: `specs/001-alertbot-core/plan.md` ← current implementation plan
+- Data model: `specs/001-alertbot-core/data-model.md`
+- Contracts: `specs/001-alertbot-core/contracts/`
+- Phase-0 research: `specs/001-alertbot-core/research.md`
+- Quickstart: `specs/001-alertbot-core/quickstart.md`
+
+Hard rules from the Constitution (NON-NEGOTIABLE):
+- Idempotent webhook handling, DB-level UNIQUE on dedup keys (CP-II / FR-005)
+- Test-first; failing test before implementation (CP-III)
+- Verify every inbound webhook signature before any business logic (CP-VII)
+- Lark `url_verification` handshake handled BEFORE signature verification (CP-VIII)
+
+Layering: 4-layer dependency direction `webhooks → services → clients → models`,
+enforced by `import-linter`. Cross-cutting: `app/config.py`, `app/observability.py`.
+
+Forbidden libraries: LangChain, LangGraph, vector DBs, MCP, Redis (until measured
+dedup bottleneck), message queues, Celery.
 <!-- SPECKIT END -->

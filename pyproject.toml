@@ -1,0 +1,105 @@
+[tool.poetry]
+name = "alertbot"
+version = "0.1.0"
+description = "AlertBot — Lark interactive-card bot bridging FlashDuty and Alertmanager."
+authors = ["AlertBot Team"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115"
+"uvicorn" = { extras = ["standard"], version = "^0.32" }
+httpx = "^0.27"
+sqlalchemy = { extras = ["asyncio"], version = "^2.0" }
+asyncpg = "^0.30"
+aiosqlite = "^0.20"
+pydantic = { extras = ["email"], version = "^2.9" }
+pyyaml = "^6.0"
+structlog = "^24.4"
+watchdog = "^5.0"
+alembic = "^1.13"
+greenlet = "^3.5.0"
+cryptography = "^48.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.24"
+pytest-cov = "^5.0"
+mypy = "^1.13"
+black = "^24.10"
+ruff = "^0.7"
+import-linter = "^2.1"
+freezegun = "^1.5"
+types-pyyaml = "^6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# ───────────────────────── black ─────────────────────────
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+# ───────────────────────── ruff ──────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line length handled by black
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+# ───────────────────────── mypy ──────────────────────────
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["watchdog.*"]
+ignore_missing_imports = true
+
+# ───────────────────────── pytest ────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+filterwarnings = [
+    "error",
+    "ignore:unclosed <socket.socket.*:ResourceWarning",
+    "ignore:unclosed event loop.*:ResourceWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+
+# ───────────────────────── coverage ──────────────────────
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = ["app/main.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

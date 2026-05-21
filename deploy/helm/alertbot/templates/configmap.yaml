@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "alertbot.fullname" . }}-config
+  labels: {{- include "alertbot.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    lark:
+      app_id: {{ .Values.config.lark.app_id | quote }}
+      app_secret_env: {{ .Values.secrets.larkAppSecret | quote }}
+      encrypt_key_env: {{ .Values.secrets.larkEncryptKey | quote }}
+      verification_token_env: {{ .Values.secrets.larkVerifyToken | quote }}
+      group_chat_id: {{ .Values.config.lark.group_chat_id | quote }}
+      meta_channel_id: {{ .Values.config.lark.meta_channel_id | quote }}
+    flashduty:
+      webhook_secret_env: {{ .Values.secrets.fdWebhookSecret | quote }}
+      schedule_api_base: {{ .Values.config.flashduty.schedule_api_base | quote }}
+      schedule_api_token_env: {{ .Values.secrets.fdApiToken | quote }}
+    alertmanager:
+      base_url: {{ .Values.config.alertmanager.base_url | quote }}
+      service_account_token_env: {{ .Values.secrets.amToken | quote }}
+      request_timeout_seconds: {{ .Values.config.alertmanager.request_timeout_seconds }}
+    oncall:
+      priority_chain: {{ .Values.config.oncall.priority_chain | toJson }}
+      static_service_map: {{ .Values.config.oncall.static_service_map | toJson }}
+      fallback_role: {{ .Values.config.oncall.fallback_role | quote }}
+      schedule_cache_ttl_seconds: {{ .Values.config.oncall.schedule_cache_ttl_seconds }}
+    severity_colors: {{ .Values.config.severity_colors | toJson }}
+    silence_buttons:
+      fixed_durations: {{ .Values.config.silence_buttons.fixed_durations | toJson }}
+      enable_custom: {{ .Values.config.silence_buttons.enable_custom }}
+    timezone: {{ .Values.config.timezone | quote }}
+    max_silence_hours: {{ .Values.config.max_silence_hours }}

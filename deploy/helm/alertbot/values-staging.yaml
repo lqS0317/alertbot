@@ -1,0 +1,37 @@
+# Staging override — 单 Pod，开放 Ingress 给 Lark + FlashDuty webhook 回调使用。
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/alertbot
+  tag: "0.1.0-staging"
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: alertbot-staging.hashkeychain.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts: [alertbot-staging.hashkeychain.net]
+      secretName: alertbot-staging-tls
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+
+config:
+  lark:
+    group_chat_id: "oc_staging_group_xxxxxxxx"
+    meta_channel_id: "oc_staging_meta_xxxxxxxx"
+  alertmanager:
+    base_url: "http://alertmanager-staging.observability.svc.cluster.local:9093"
+  oncall:
+    static_service_map:
+      payment-api: "alice@company.com"
+      auth-svc: "bob@company.com"

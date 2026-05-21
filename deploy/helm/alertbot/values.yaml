@@ -1,0 +1,78 @@
+replicaCount: 1
+
+image:
+  repository: alertbot
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: false
+  className: nginx
+  hosts: []
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /healthz
+    initialDelaySeconds: 2
+    periodSeconds: 5
+
+# YAML 配置（非 secret） — 渲染成 ConfigMap 挂到 /etc/alertbot/config.yaml
+config:
+  timezone: "Asia/Shanghai"
+  max_silence_hours: 24
+  severity_colors:
+    critical: red
+    warning: orange
+    info: blue
+  silence_buttons:
+    fixed_durations: [5min, 30min, 1h, 4h, 24h]
+    enable_custom: true
+  oncall:
+    priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+    fallback_role: "@on-call"
+    schedule_cache_ttl_seconds: 300
+    static_service_map: {}
+  lark:
+    app_id: ""
+    group_chat_id: ""
+    meta_channel_id: ""
+  flashduty:
+    schedule_api_base: "https://api.flashcat.cloud/api/v1"
+  alertmanager:
+    base_url: ""
+    request_timeout_seconds: 5
+
+# secret 引用 — 实际值在 SealedSecret/Vault；不要把真值放这里。
+secrets:
+  larkAppSecret: "LARK_APP_SECRET"
+  larkEncryptKey: "LARK_ENCRYPT_KEY"
+  larkVerifyToken: "LARK_VERIFY_TOKEN"
+  fdWebhookSecret: "FD_WEBHOOK_SECRET"
+  fdApiToken: "FD_API_TOKEN"
+  amToken: "AM_TOKEN"
+  databaseUrl: "DATABASE_URL"
+
+env:
+  ALERTBOT_CONFIG: /etc/alertbot/config.yaml
+
+serviceAccount:
+  create: true
+  name: alertbot

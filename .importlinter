@@ -1,0 +1,13 @@
+[importlinter]
+root_package = app
+include_external_packages = False
+
+[importlinter:contract:layered-arch]
+name = AlertBot 4-layer dependency direction (webhooks > services > clients > models)
+type = layers
+layers =
+    app.webhooks
+    app.services
+    app.clients
+    app.models
+exhaustive = false

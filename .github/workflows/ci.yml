@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "001-*", "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: "2.4.0"
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache poetry venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root --with dev
+
+      - name: Install project (editable)
+        run: poetry install --no-interaction
+
+      - name: Format check (black)
+        run: poetry run black --check app tests
+
+      - name: Lint (ruff)
+        run: poetry run ruff check app tests
+
+      - name: Type check (mypy --strict)
+        run: poetry run mypy app
+
+      - name: Layer enforcement (import-linter)
+        run: poetry run lint-imports
+
+      - name: Tests + coverage gate (≥80% on services/clients/webhooks)
+        run: |
+          poetry run pytest \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under=80
