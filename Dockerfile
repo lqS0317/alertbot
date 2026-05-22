@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_NO_INTERACTION=1 \
     PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 
-WORKDIR /build
+WORKDIR /app
 
 RUN apt-get update \
  && apt-get install --no-install-recommends -y build-essential curl \
@@ -43,13 +43,13 @@ RUN groupadd --system alertbot \
 
 WORKDIR /app
 
-COPY --from=builder --chown=alertbot:alertbot /build/.venv /app/.venv
-COPY --from=builder --chown=alertbot:alertbot /build/app /app/app
-COPY --from=builder --chown=alertbot:alertbot /build/migrations /app/migrations
-COPY --from=builder --chown=alertbot:alertbot /build/alembic.ini /app/alembic.ini
+COPY --from=builder --chown=alertbot:alertbot /app/.venv /app/.venv
+COPY --from=builder --chown=alertbot:alertbot /app/app /app/app
+COPY --from=builder --chown=alertbot:alertbot /app/migrations /app/migrations
+COPY --from=builder --chown=alertbot:alertbot /app/alembic.ini /app/alembic.ini
 COPY --chown=alertbot:alertbot config/example.yaml /app/config/config.yaml
 
 USER alertbot
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
