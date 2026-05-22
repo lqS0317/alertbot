@@ -47,6 +47,7 @@ config:
     enable_custom: true
   oncall:
     priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+    incident_label_key: "lark_user"
     fallback_role: ["@on-call"]
     schedule_cache_ttl_seconds: 300
     static_service_map: {}

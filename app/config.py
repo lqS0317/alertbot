@@ -56,6 +56,7 @@ OncallTier = Literal["incident_label", "fd_schedule", "static_map", "fallback_ro
 
 class OncallConfig(_Frozen):
     priority_chain: list[OncallTier]
+    incident_label_key: str = "lark_user"
     static_service_map: dict[str, list[str]] = Field(default_factory=dict)
     fallback_role: list[str]
     schedule_cache_ttl_seconds: int = Field(default=300, ge=0, le=300)

@@ -22,6 +22,7 @@ data:
       request_timeout_seconds: {{ .Values.config.alertmanager.request_timeout_seconds }}
     oncall:
       priority_chain: {{ .Values.config.oncall.priority_chain | toJson }}
+      incident_label_key: {{ .Values.config.oncall.incident_label_key | quote }}
       static_service_map: {{ .Values.config.oncall.static_service_map | toJson }}
       fallback_role: {{ .Values.config.oncall.fallback_role | toJson }}
       schedule_cache_ttl_seconds: {{ .Values.config.oncall.schedule_cache_ttl_seconds }}

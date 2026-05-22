@@ -39,6 +39,7 @@ alertmanager:
   request_timeout_seconds: 5
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+  incident_label_key: "lark_user"
   static_service_map:
     payment-api: ["{email}"]
   fallback_role: ["@on-call"]

@@ -60,6 +60,7 @@ alertmanager:
 
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+  incident_label_key: "lark_user"
   static_service_map:
     payment-api: ["alice@company.com", "bob@company.com"]
     auth-svc:    ["carol@company.com"]

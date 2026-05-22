@@ -25,6 +25,8 @@ alertmanager:
 oncall:
   # D 方案 4 层优先级链：先匹配的赢
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+  # incident_label 策略读取告警 labels 里的哪个 key；该值应为负责人邮箱。
+  incident_label_key: "lark_user"
   # 静态兜底映射 service → 邮箱列表
   static_service_map:
     payment-api: ["alice@company.com", "bob@company.com"]

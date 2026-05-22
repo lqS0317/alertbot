@@ -33,6 +33,7 @@ config:
   alertmanager:
     base_url: "http://alertmanager.observability.svc.cluster.local:9093"
   oncall:
+    incident_label_key: "lark_user"
     static_service_map: {}
 
 secrets:

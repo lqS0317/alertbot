@@ -59,6 +59,7 @@ alertmanager:
   request_timeout_seconds: 5
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
+  incident_label_key: "owner_email"
   static_service_map:
     payment-api: ["carol@company.com"]
   fallback_role: ["@on-call"]
@@ -97,13 +98,28 @@ async def test_incident_label_wins_and_skips_lower_tiers(config_path: Path) -> N
     )
     resolver = OncallResolver(flashduty=fd, lark=lark)
 
-    target = await resolver.resolve(make_alert({"lark_user": "alice@company.com"}))
+    target = await resolver.resolve(make_alert({"owner_email": "alice@company.com"}))
 
     assert target.source == "incident_label"
     assert target.email == "alice@company.com"
     assert target.user_id == "ou_alice"
     assert fd.calls == 0
     assert lark.calls_by_email == ["alice@company.com"]
+
+
+@pytest.mark.asyncio
+async def test_incident_label_uses_configured_label_key(config_path: Path) -> None:
+    fd = FakeFlashDutyClient(email=None)
+    lark = FakeLarkClient(
+        by_email={"alice@company.com": ("ou_alice", "Alice")},
+        calls_by_email=[],
+    )
+    resolver = OncallResolver(flashduty=fd, lark=lark)
+
+    target = await resolver.resolve(make_alert({"lark_user": "ignored", "owner_email": "alice@company.com"}))
+
+    assert target.source == "incident_label"
+    assert target.email == "alice@company.com"
 
 
 @pytest.mark.asyncio

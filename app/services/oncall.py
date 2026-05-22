@@ -117,7 +117,7 @@ class OncallResolver:
         )
 
     async def _from_incident_label(self, alert: Alert) -> OncallTarget | None:
-        raw = alert.labels.get("lark_user")
+        raw = alert.labels.get(get_config().oncall.incident_label_key)
         if not isinstance(raw, str) or not raw:
             return None
         return await self._target_from_email(raw, source="incident_label")
