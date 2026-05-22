@@ -11,7 +11,7 @@ import pytest
 from app.config import set_config_path
 from app.models import Alert, AlertState
 from app.services.cards import render_firing
-from app.services.oncall import OncallTarget
+from app.services.oncall import OncallRecipient, OncallTarget
 
 
 @pytest.fixture(autouse=True)
@@ -36,11 +36,15 @@ def make_alert() -> Alert:
 
 def test_render_user_mention_from_oncall_target() -> None:
     target = OncallTarget(
-        kind="user",
         source="fd_schedule",
-        email="bob@company.com",
-        user_id="ou_bob",
-        display_name="Bob",
+        recipients=(
+            OncallRecipient(
+                kind="user",
+                email="bob@company.com",
+                user_id="ou_bob",
+                display_name="Bob",
+            ),
+        ),
     )
 
     payload = render_firing(make_alert(), oncall_target=target)
@@ -49,11 +53,39 @@ def test_render_user_mention_from_oncall_target() -> None:
 
 
 def test_render_role_mention_from_fallback_target() -> None:
-    target = OncallTarget(kind="role", source="fallback_role", role="@on-call")
+    target = OncallTarget(
+        source="fallback_role",
+        recipients=(OncallRecipient(kind="role", role="@on-call"),),
+    )
 
     payload = render_firing(make_alert(), oncall_target=target)
 
     assert "@on-call" in _all_content(payload)
+
+
+def test_render_multiple_user_mentions_from_oncall_target() -> None:
+    target = OncallTarget(
+        source="static_map",
+        recipients=(
+            OncallRecipient(
+                kind="user",
+                email="alice@company.com",
+                user_id="ou_alice",
+                display_name="Alice",
+            ),
+            OncallRecipient(
+                kind="user",
+                email="bob@company.com",
+                user_id="ou_bob",
+                display_name="Bob",
+            ),
+        ),
+    )
+
+    payload = render_firing(make_alert(), oncall_target=target)
+    content = _all_content(payload)
+
+    assert '<at user_id="ou_alice">Alice</at> <at user_id="ou_bob">Bob</at>' in content
 
 
 def test_render_without_target_preserves_us1_no_mention_behavior() -> None:

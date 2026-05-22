@@ -242,7 +242,7 @@ async def handle_firing(
         await oncall_resolver.resolve(alert_for_render) if oncall_resolver is not None else None
     )
     if oncall_target is not None:
-        alert_for_render.oncall_target = oncall_target.email or oncall_target.role
+        alert_for_render.oncall_target = oncall_target.mention_text()
     payload = render_firing(alert_for_render, oncall_target=oncall_target)
     message_id = await lark.post_card(chat_id=chat_id, card_payload=payload)
 

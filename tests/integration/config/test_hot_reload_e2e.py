@@ -12,12 +12,12 @@ def test_hot_reload_changes_static_service_map_without_restart(tmp_path: Path) -
     path = tmp_path / "config.yaml"
     path.write_text(_yaml_for("alice@company.com"))
     cfg_mod.set_config_path(path)
-    assert cfg_mod.get_config().oncall.static_service_map["payment-api"] == "alice@company.com"
+    assert cfg_mod.get_config().oncall.static_service_map["payment-api"] == ["alice@company.com"]
 
     path.write_text(_yaml_for("bob@company.com"))
     cfg_mod.reload_config()
 
-    assert cfg_mod.get_config().oncall.static_service_map["payment-api"] == "bob@company.com"
+    assert cfg_mod.get_config().oncall.static_service_map["payment-api"] == ["bob@company.com"]
 
 
 def _yaml_for(email: str) -> str:
@@ -40,8 +40,8 @@ alertmanager:
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
   static_service_map:
-    payment-api: "{email}"
-  fallback_role: "@on-call"
+    payment-api: ["{email}"]
+  fallback_role: ["@on-call"]
   schedule_cache_ttl_seconds: 300
 severity_colors:
   critical: red

@@ -34,8 +34,8 @@ GOLDEN_V1 = textwrap.dedent(
       request_timeout_seconds: 5
     oncall:
       priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
-      static_service_map: {payment-api: "alice@x"}
-      fallback_role: "@on-call"
+      static_service_map: {payment-api: ["alice@x"]}
+      fallback_role: ["@on-call"]
       schedule_cache_ttl_seconds: 60
     severity_colors: {critical: red}
     silence_buttons: {fixed_durations: [5min, 30min], enable_custom: true}
@@ -61,12 +61,12 @@ def test_reload_picks_up_new_value(tmp_path: Path) -> None:
     cfg_mod.set_config_path(p)
 
     snap1 = cfg_mod.get_config()
-    assert snap1.oncall.static_service_map["payment-api"] == "alice@x"
+    assert snap1.oncall.static_service_map["payment-api"] == ["alice@x"]
 
     p.write_text(GOLDEN_V2)
     cfg_mod.reload_config()
     snap2 = cfg_mod.get_config()
-    assert snap2.oncall.static_service_map["payment-api"] == "bob@x"
+    assert snap2.oncall.static_service_map["payment-api"] == ["bob@x"]
 
 
 def test_reload_with_broken_yaml_keeps_old_snapshot(tmp_path: Path) -> None:

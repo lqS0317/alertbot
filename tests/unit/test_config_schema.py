@@ -33,8 +33,8 @@ GOLDEN_YAML = textwrap.dedent(
     oncall:
       priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
       static_service_map:
-        payment-api: "alice@company.com"
-      fallback_role: "@on-call"
+        payment-api: ["alice@company.com", "bob@company.com"]
+      fallback_role: ["@on-call"]
       schedule_cache_ttl_seconds: 300
     severity_colors:
       critical: red
@@ -56,6 +56,11 @@ def test_golden_yaml_loads_and_validates(tmp_path: Path) -> None:
     assert isinstance(cfg, AlertBotConfig)
     assert cfg.timezone == "Asia/Shanghai"
     assert cfg.max_silence_hours == 24
+    assert cfg.oncall.static_service_map["payment-api"] == [
+        "alice@company.com",
+        "bob@company.com",
+    ]
+    assert cfg.oncall.fallback_role == ["@on-call"]
     assert cfg.oncall.schedule_cache_ttl_seconds == 300
     assert cfg.silence_buttons.fixed_durations == ["5min", "30min", "1h", "4h", "24h"]
 

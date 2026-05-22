@@ -60,8 +60,8 @@ alertmanager:
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
   static_service_map:
-    payment-api: "carol@company.com"
-  fallback_role: "@on-call"
+    payment-api: ["carol@company.com"]
+  fallback_role: ["@on-call"]
   schedule_cache_ttl_seconds: 300
 severity_colors:
   critical: red
@@ -137,6 +137,34 @@ async def test_static_map_wins_over_fallback_role(config_path: Path) -> None:
     assert target.source == "static_map"
     assert target.email == "carol@company.com"
     assert target.user_id == "ou_carol"
+
+
+@pytest.mark.asyncio
+async def test_static_map_can_return_multiple_users(config_path: Path) -> None:
+    path = config_path
+    path.write_text(path.read_text().replace(
+        'payment-api: ["carol@company.com"]',
+        'payment-api: ["carol@company.com", "dave@company.com"]',
+    ))
+    set_config_path(path)
+    fd = FakeFlashDutyClient(email=None)
+    lark = FakeLarkClient(
+        by_email={
+            "carol@company.com": ("ou_carol", "Carol"),
+            "dave@company.com": ("ou_dave", "Dave"),
+        },
+        calls_by_email=[],
+    )
+    resolver = OncallResolver(flashduty=fd, lark=lark)
+
+    target = await resolver.resolve(make_alert())
+
+    assert target.source == "static_map"
+    assert [recipient.email for recipient in target.recipients] == [
+        "carol@company.com",
+        "dave@company.com",
+    ]
+    assert [recipient.user_id for recipient in target.recipients] == ["ou_carol", "ou_dave"]
 
 
 @pytest.mark.asyncio

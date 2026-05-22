@@ -318,8 +318,8 @@ class AlertBotConfig(BaseModel):
 
 class OncallConfig(BaseModel):
     priority_chain: list[Literal["incident_label", "fd_schedule", "static_map", "fallback_role"]]
-    static_service_map: dict[str, str]   # service_name -> lark email
-    fallback_role: str                   # e.g. "@on-call"
+    static_service_map: dict[str, list[str]]   # service_name -> lark emails
+    fallback_role: list[str]                   # e.g. ["@on-call"]
     schedule_cache_ttl_seconds: int = Field(default=300, ge=0, le=300)  # ≤ 5 min (FR-013)
 
 class SilenceButtonsConfig(BaseModel):

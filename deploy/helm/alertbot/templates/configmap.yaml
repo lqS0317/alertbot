@@ -23,7 +23,7 @@ data:
     oncall:
       priority_chain: {{ .Values.config.oncall.priority_chain | toJson }}
       static_service_map: {{ .Values.config.oncall.static_service_map | toJson }}
-      fallback_role: {{ .Values.config.oncall.fallback_role | quote }}
+      fallback_role: {{ .Values.config.oncall.fallback_role | toJson }}
       schedule_cache_ttl_seconds: {{ .Values.config.oncall.schedule_cache_ttl_seconds }}
     severity_colors: {{ .Values.config.severity_colors | toJson }}
     silence_buttons:

@@ -25,12 +25,12 @@ alertmanager:
 oncall:
   # D 方案 4 层优先级链：先匹配的赢
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
-  # 静态兜底映射 service → 邮箱
+  # 静态兜底映射 service → 邮箱列表
   static_service_map:
-    payment-api: "alice@company.com"
-    auth-svc:    "bob@company.com"
+    payment-api: ["alice@company.com", "bob@company.com"]
+    auth-svc:    ["carol@company.com"]
   # 顶层兜底（前三层都没出结果时 @ 这个角色）
-  fallback_role: "@on-call"
+  fallback_role: ["@on-call"]
   # FlashDuty schedule 缓存 TTL（FR-013 + Constitution I 例外，硬上限 300s）
   schedule_cache_ttl_seconds: 300
 

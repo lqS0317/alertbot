@@ -28,9 +28,8 @@ class LarkUserLookup(Protocol):
 
 
 @dataclass(frozen=True)
-class OncallTarget:
+class OncallRecipient:
     kind: OncallKind
-    source: OncallSource
     email: str | None = None
     user_id: str | None = None
     display_name: str | None = None
@@ -44,6 +43,35 @@ class OncallTarget:
         if self.kind == "role" and self.role is not None:
             return self.role
         return self.email or self.role or "@on-call"
+
+
+@dataclass(frozen=True)
+class OncallTarget:
+    source: OncallSource
+    recipients: tuple[OncallRecipient, ...]
+
+    @property
+    def kind(self) -> OncallKind:
+        return self.recipients[0].kind if self.recipients else "role"
+
+    @property
+    def email(self) -> str | None:
+        return self.recipients[0].email if self.recipients else None
+
+    @property
+    def user_id(self) -> str | None:
+        return self.recipients[0].user_id if self.recipients else None
+
+    @property
+    def display_name(self) -> str | None:
+        return self.recipients[0].display_name if self.recipients else None
+
+    @property
+    def role(self) -> str | None:
+        return self.recipients[0].role if self.recipients else None
+
+    def mention_text(self) -> str:
+        return " ".join(recipient.mention_text() for recipient in self.recipients)
 
 
 class OncallResolver:
@@ -70,7 +98,10 @@ class OncallResolver:
                 target = await self._from_static_map(alert)
             elif tier == "fallback_role":
                 target = OncallTarget(
-                    kind="role", source="fallback_role", role=cfg.oncall.fallback_role
+                    source="fallback_role",
+                    recipients=tuple(
+                        OncallRecipient(kind="role", role=role) for role in cfg.oncall.fallback_role
+                    ),
                 )
             else:  # pragma: no cover - Pydantic Literal prevents this
                 target = None
@@ -78,7 +109,12 @@ class OncallResolver:
             if target is not None:
                 return target
 
-        return OncallTarget(kind="role", source="fallback_role", role=cfg.oncall.fallback_role)
+        return OncallTarget(
+            source="fallback_role",
+            recipients=tuple(
+                OncallRecipient(kind="role", role=role) for role in cfg.oncall.fallback_role
+            ),
+        )
 
     async def _from_incident_label(self, alert: Alert) -> OncallTarget | None:
         raw = alert.labels.get("lark_user")
@@ -111,20 +147,28 @@ class OncallResolver:
         return await self._target_from_email(email, source="fd_schedule")
 
     async def _from_static_map(self, alert: Alert) -> OncallTarget | None:
-        email = get_config().oncall.static_service_map.get(alert.service)
-        if not email:
+        emails = get_config().oncall.static_service_map.get(alert.service)
+        if not emails:
             return None
-        return await self._target_from_email(email, source="static_map")
+        return await self._target_from_emails(emails, source="static_map")
 
     async def _target_from_email(self, email: str, *, source: OncallSource) -> OncallTarget:
+        return await self._target_from_emails([email], source=source)
+
+    async def _target_from_emails(self, emails: list[str], *, source: OncallSource) -> OncallTarget:
+        recipients = []
+        for email in emails:
+            recipients.append(await self._recipient_from_email(email))
+        return OncallTarget(source=source, recipients=tuple(recipients))
+
+    async def _recipient_from_email(self, email: str) -> OncallRecipient:
         user = await self._lark.lookup_user_by_email(email)
         if user is None:
             # 仍然返回 user target，卡片可显示 email；后续 Phase 可接 meta-channel。
-            return OncallTarget(kind="user", source=source, email=email)
+            return OncallRecipient(kind="user", email=email)
         user_id, display_name = user
-        return OncallTarget(
+        return OncallRecipient(
             kind="user",
-            source=source,
             email=email,
             user_id=user_id,
             display_name=display_name,

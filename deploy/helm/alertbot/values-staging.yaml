@@ -33,5 +33,5 @@ config:
     base_url: "http://alertmanager-staging.observability.svc.cluster.local:9093"
   oncall:
     static_service_map:
-      payment-api: "alice@company.com"
-      auth-svc: "bob@company.com"
+      payment-api: ["alice@company.com", "bob@company.com"]
+      auth-svc: ["carol@company.com"]

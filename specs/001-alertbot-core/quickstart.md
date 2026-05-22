@@ -61,9 +61,9 @@ alertmanager:
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
   static_service_map:
-    payment-api: "alice@company.com"
-    auth-svc:    "bob@company.com"
-  fallback_role: "@on-call"
+    payment-api: ["alice@company.com", "bob@company.com"]
+    auth-svc:    ["carol@company.com"]
+  fallback_role: ["@on-call"]
   schedule_cache_ttl_seconds: 300
 
 severity_colors:

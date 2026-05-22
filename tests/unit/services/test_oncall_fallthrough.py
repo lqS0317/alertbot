@@ -41,8 +41,8 @@ flashduty: {webhook_secret_env: "X", schedule_api_base: "https://fd.test", sched
 alertmanager: {base_url: "http://am", service_account_token_env: "X", request_timeout_seconds: 5}
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
-  static_service_map: {payment-api: "carol@company.com"}
-  fallback_role: "@on-call"
+  static_service_map: {payment-api: ["carol@company.com"]}
+  fallback_role: ["@on-call"]
   schedule_cache_ttl_seconds: 300
 severity_colors: {critical: red}
 silence_buttons: {fixed_durations: [5min, 30min, 1h, 4h, 24h], enable_custom: true}
@@ -64,7 +64,7 @@ alertmanager: {base_url: "http://am", service_account_token_env: "X", request_ti
 oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
   static_service_map: {}
-  fallback_role: "@on-call"
+  fallback_role: ["@on-call"]
   schedule_cache_ttl_seconds: 300
 severity_colors: {critical: red}
 silence_buttons: {fixed_durations: [5min, 30min, 1h, 4h, 24h], enable_custom: true}

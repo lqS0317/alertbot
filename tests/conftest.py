@@ -83,8 +83,8 @@ _TEST_YAML = textwrap.dedent(
     oncall:
       priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
       static_service_map:
-        payment-api: "alice@company.com"
-      fallback_role: "@on-call"
+        payment-api: ["alice@company.com"]
+      fallback_role: ["@on-call"]
       schedule_cache_ttl_seconds: 60
     severity_colors:
       critical: red
