@@ -132,46 +132,36 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
 
 
 def _silence_actions(alert_fingerprint: str) -> list[dict[str, Any]]:
-    """Render fixed/custom silence buttons for Lark card actions."""
+    """Render silence durations as a single overflow dropdown (schema v2)."""
     cfg = get_config()
-    actions: list[dict[str, Any]] = [
+    options: list[dict[str, Any]] = [
         {
-            "tag": "button",
-            "element_id": f"silence_{duration.replace('min', 'm')}",
             "text": {"tag": "plain_text", "content": duration},
-            "type": "default",
-            "behaviors": [
-                {
-                    "type": "callback",
-                    "value": {
-                        "kind": "silence",
-                        "alert_fingerprint": alert_fingerprint,
-                        "duration": duration,
-                    },
-                }
-            ],
+            "value": {
+                "kind": "silence",
+                "alert_fingerprint": alert_fingerprint,
+                "duration": duration,
+            },
         }
         for duration in cfg.silence_buttons.fixed_durations
     ]
     if cfg.silence_buttons.enable_custom:
-        actions.append(
+        options.append(
             {
-                "tag": "button",
-                "element_id": "silence_custom",
                 "text": {"tag": "plain_text", "content": "Custom"},
-                "type": "default",
-                "behaviors": [
-                    {
-                        "type": "callback",
-                        "value": {
-                            "kind": "custom_open",
-                            "alert_fingerprint": alert_fingerprint,
-                        },
-                    }
-                ],
+                "value": {
+                    "kind": "custom_open",
+                    "alert_fingerprint": alert_fingerprint,
+                },
             }
         )
-    return actions
+    return [
+        {
+            "tag": "overflow",
+            "element_id": "silence_overflow",
+            "options": options,
+        }
+    ]
 
 
 def render_resolved(alert: Alert) -> dict[str, Any]:

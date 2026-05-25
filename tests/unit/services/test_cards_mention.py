@@ -100,10 +100,11 @@ def test_render_firing_includes_silence_action_buttons() -> None:
     payload = render_firing(make_alert())
     flat = json.dumps(payload, ensure_ascii=False)
 
-    assert '"tag": "action"' not in flat
+    assert '"tag": "action"' not in flat  # schema v2 不再使用 action 容器
+    assert '"tag": "overflow"' in flat
     for duration in ["5min", "30min", "1h", "4h", "24h"]:
         assert f'"duration": "{duration}"' in flat
-        assert f'"type": "callback", "value": {{"kind": "silence"' in flat
+        assert '"kind": "silence"' in flat
     assert '"kind": "custom_open"' in flat
     assert '"alert_fingerprint": "fp-card-mention"' in flat
 
