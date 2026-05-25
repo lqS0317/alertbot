@@ -46,7 +46,7 @@ class LarkAPIError(Exception):
     """非 200 / Lark business-code 非零 — 调用方可决定是 meta-channel 上报还是降级。"""
 
     def __init__(self, status_code: int, body: str) -> None:
-        super().__init__(f"Lark API error: HTTP {status_code} body={body[:200]}")
+        super().__init__(f"Lark API error: HTTP {status_code} body={body}")
         self.status_code = status_code
         self.body = body
 
@@ -227,7 +227,16 @@ class LarkClient:
         if email in self._user_by_email:
             return self._user_by_email[email]
 
-        resp = await self._send_with_retry("GET", USER_BATCH_GET_ID_PATH, params={"emails": email})
+        # 飞书 batch_get_id 是 POST JSON body；用 GET 会被路由成 `/users/{open_id}`，
+        # 进而把 `batch_get_id` 当成 open_id 报 99992351。
+        try:
+            resp = await self._send_with_retry(
+                "POST", USER_BATCH_GET_ID_PATH, json={"emails": [email]}
+            )
+        except LarkAPIError:
+            # 通讯录权限缺失 / 用户不存在等不应阻断告警卡片；调用方会退化展示邮箱文本。
+            self._user_by_email[email] = None
+            return None
         data = resp.json()
         if data.get("code", 0) != 0:
             self._user_by_email[email] = None

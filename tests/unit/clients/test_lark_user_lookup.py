@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -72,7 +74,8 @@ async def test_lookup_user_by_email_parses_user_list_and_caches() -> None:
         nonlocal calls
         calls += 1
         assert "/contact/v3/users/batch_get_id" in str(req.url)
-        assert req.url.params["emails"] == "bob@company.com"
+        assert req.method == "POST"
+        assert json.loads(req.content.decode("utf-8")) == {"emails": ["bob@company.com"]}
         return httpx.Response(
             200,
             json={
