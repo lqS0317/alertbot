@@ -96,5 +96,24 @@ def test_render_without_target_preserves_us1_no_mention_behavior() -> None:
     assert "@on-call" not in flat
 
 
+def test_render_firing_includes_silence_action_buttons() -> None:
+    payload = render_firing(make_alert())
+    flat = json.dumps(payload, ensure_ascii=False)
+
+    for duration in ["5min", "30min", "1h", "4h", "24h"]:
+        assert f'"duration": "{duration}"' in flat
+    assert '"kind": "custom_open"' in flat
+    assert '"alert_fingerprint": "fp-card-mention"' in flat
+
+
+def test_render_firing_skips_empty_oncall_block() -> None:
+    target = OncallTarget(source="static_map", recipients=())
+
+    payload = render_firing(make_alert(), oncall_target=target)
+    flat = json.dumps(payload, ensure_ascii=False)
+
+    assert "**On-call**" not in flat
+
+
 def _all_content(payload: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False).replace('\\"', '"')

@@ -109,3 +109,22 @@ def test_config_is_frozen(tmp_path: Path) -> None:
     cfg = load_config_from_yaml(p)
     with pytest.raises(ValidationError):
         cfg.timezone = "UTC"  # type: ignore[misc]
+
+
+def test_empty_static_map_recipient_list_rejected(tmp_path: Path) -> None:
+    p = tmp_path / "empty_static_map.yaml"
+    p.write_text(
+        GOLDEN_YAML.replace(
+            'payment-api: ["alice@company.com", "bob@company.com"]',
+            "payment-api: []",
+        )
+    )
+    with pytest.raises(ValidationError):
+        load_config_from_yaml(p)
+
+
+def test_empty_fallback_role_rejected(tmp_path: Path) -> None:
+    p = tmp_path / "empty_fallback.yaml"
+    p.write_text(GOLDEN_YAML.replace('fallback_role: ["@on-call"]', "fallback_role: []"))
+    with pytest.raises(ValidationError):
+        load_config_from_yaml(p)

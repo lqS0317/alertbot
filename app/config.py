@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
@@ -63,6 +63,23 @@ class OncallConfig(_Frozen):
     static_service_map: dict[str, list[str]] = Field(default_factory=dict)
     fallback_role: list[str]
     schedule_cache_ttl_seconds: int = Field(default=300, ge=0, le=300)
+
+    @field_validator("static_service_map")
+    @classmethod
+    def _static_service_map_values_non_empty(
+        cls, value: dict[str, list[str]]
+    ) -> dict[str, list[str]]:
+        for service, emails in value.items():
+            if not emails or any(not email.strip() for email in emails):
+                raise ValueError(f"static_service_map.{service} must contain non-empty emails")
+        return value
+
+    @field_validator("fallback_role")
+    @classmethod
+    def _fallback_role_non_empty(cls, value: list[str]) -> list[str]:
+        if not value or any(not role.strip() for role in value):
+            raise ValueError("fallback_role must contain at least one non-empty role")
+        return value
 
 
 SilenceDuration = Literal["5min", "30min", "1h", "4h", "24h"]

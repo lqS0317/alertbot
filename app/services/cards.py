@@ -105,16 +105,18 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
             },
         },
     ]
-    if oncall_target is not None:
+    mention = oncall_target.mention_text().strip() if oncall_target is not None else ""
+    if mention:
         elements.append(
             {
                 "tag": "div",
                 "text": {
                     "tag": "lark_md",
-                    "content": f"**On-call**\n{oncall_target.mention_text()}",
+                    "content": f"**On-call**\n{mention}",
                 },
             }
         )
+    elements.append(_silence_actions(alert.incident_fingerprint))
 
     return {
         "schema": "2.0",
@@ -127,6 +129,37 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
         },
         "body": {"elements": elements},
     }
+
+
+def _silence_actions(alert_fingerprint: str) -> dict[str, Any]:
+    """Render fixed/custom silence buttons for Lark card actions."""
+    cfg = get_config()
+    actions: list[dict[str, Any]] = [
+        {
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": duration},
+            "type": "default",
+            "value": {
+                "kind": "silence",
+                "alert_fingerprint": alert_fingerprint,
+                "duration": duration,
+            },
+        }
+        for duration in cfg.silence_buttons.fixed_durations
+    ]
+    if cfg.silence_buttons.enable_custom:
+        actions.append(
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "Custom"},
+                "type": "default",
+                "value": {
+                    "kind": "custom_open",
+                    "alert_fingerprint": alert_fingerprint,
+                },
+            }
+        )
+    return {"tag": "action", "actions": actions}
 
 
 def render_resolved(alert: Alert) -> dict[str, Any]:
