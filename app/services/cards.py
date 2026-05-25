@@ -116,7 +116,7 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
                 },
             }
         )
-    elements.append(_silence_actions(alert.incident_fingerprint))
+    elements.extend(_silence_actions(alert.incident_fingerprint))
 
     return {
         "schema": "2.0",
@@ -131,19 +131,25 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
     }
 
 
-def _silence_actions(alert_fingerprint: str) -> dict[str, Any]:
+def _silence_actions(alert_fingerprint: str) -> list[dict[str, Any]]:
     """Render fixed/custom silence buttons for Lark card actions."""
     cfg = get_config()
     actions: list[dict[str, Any]] = [
         {
             "tag": "button",
+            "element_id": f"silence_{duration.replace('min', 'm')}",
             "text": {"tag": "plain_text", "content": duration},
             "type": "default",
-            "value": {
-                "kind": "silence",
-                "alert_fingerprint": alert_fingerprint,
-                "duration": duration,
-            },
+            "behaviors": [
+                {
+                    "type": "callback",
+                    "value": {
+                        "kind": "silence",
+                        "alert_fingerprint": alert_fingerprint,
+                        "duration": duration,
+                    },
+                }
+            ],
         }
         for duration in cfg.silence_buttons.fixed_durations
     ]
@@ -151,15 +157,21 @@ def _silence_actions(alert_fingerprint: str) -> dict[str, Any]:
         actions.append(
             {
                 "tag": "button",
+                "element_id": "silence_custom",
                 "text": {"tag": "plain_text", "content": "Custom"},
                 "type": "default",
-                "value": {
-                    "kind": "custom_open",
-                    "alert_fingerprint": alert_fingerprint,
-                },
+                "behaviors": [
+                    {
+                        "type": "callback",
+                        "value": {
+                            "kind": "custom_open",
+                            "alert_fingerprint": alert_fingerprint,
+                        },
+                    }
+                ],
             }
         )
-    return {"tag": "action", "actions": actions}
+    return actions
 
 
 def render_resolved(alert: Alert) -> dict[str, Any]:
