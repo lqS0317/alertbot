@@ -64,8 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Lark 客户端 — 测试场景里 build_app_for_tests 已经塞了一个带 MockTransport 的进来。
     if not hasattr(app.state, "lark_client"):
-        token = os.environ.get(cfg.lark.app_secret_env, "")
-        app.state.lark_client = LarkClient(tenant_token=token)
+        # 生产路径：用 app_id + app_secret 让 LarkClient 自己换 tenant_access_token
+        # 并按 7200s TTL 自动续期；不要把 app_secret 当 Bearer 直接用。
+        app_secret = os.environ.get(cfg.lark.app_secret_env, "")
+        app.state.lark_client = LarkClient(app_id=cfg.lark.app_id, app_secret=app_secret)
         app.state._lark_owned = True
     else:
         app.state._lark_owned = False

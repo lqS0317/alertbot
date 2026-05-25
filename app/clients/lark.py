@@ -30,12 +30,16 @@ PATCH_CARD_PATH_TPL = "/open-apis/im/v1/messages/{message_id}"
 USER_BY_ID_PATH_TPL = "/open-apis/contact/v3/users/{user_id}"
 USER_BATCH_GET_ID_PATH = "/open-apis/contact/v3/users/batch_get_id"
 FORM_MODAL_PATH = "/open-apis/im/v1/cards/forms"
+TENANT_TOKEN_PATH = "/open-apis/auth/v3/tenant_access_token/internal"
 
 DEFAULT_BASE_URL = "https://open.feishu.cn"
 DEFAULT_TIMEOUT_SECONDS = 5.0
 DEFAULT_MAX_RETRIES = 3
 RETRY_BACKOFF_BASE_SECONDS = 1.0
 LARK_SIGNATURE_REPLAY_WINDOW_SECONDS = 300
+# tenant_access_token 默认有效期约 7200s；提前 60s 主动续，避免临界过期。
+TENANT_TOKEN_REFRESH_LEAD_SECONDS = 60
+TENANT_TOKEN_DEFAULT_EXPIRE_SECONDS = 7200
 
 
 class LarkAPIError(Exception):
@@ -100,27 +104,69 @@ class LarkClient:
         *,
         base_url: str = DEFAULT_BASE_URL,
         tenant_token: str = "",
+        app_id: str = "",
+        app_secret: str = "",
         transport: httpx.AsyncBaseTransport | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> None:
+        """两种鉴权模式：
+
+        - 显式 `tenant_token`：直接当 Bearer 用（测试 / 临时调试）。
+        - `app_id` + `app_secret`：在首次发请求前用 `/auth/v3/tenant_access_token/internal`
+          换取 tenant_access_token 并缓存，过期前 60s 自动续。这是生产唯一推荐路径。
+
+        两个都给时优先使用 app_id+app_secret，因为 tenant_token 一定会过期。
+        """
         self._base_url = base_url
+        self._app_id = app_id
+        self._app_secret = app_secret
         self._tenant_token = tenant_token
+        # 静态 token：当作永不过期；动态模式下 _ensure_token 首次调用会真正赋值。
+        self._tenant_token_expires_at = float("inf") if tenant_token and not app_id else 0.0
         self._timeout = timeout_seconds
         self._max_retries = max_retries
         self._client = httpx.AsyncClient(
             base_url=base_url,
             timeout=timeout_seconds,
             transport=transport,
-            headers=self._auth_headers(),
         )
         self._email_by_user_id: dict[str, str | None] = {}
         self._user_by_email: dict[str, tuple[str, str] | None] = {}
+        self._token_lock = asyncio.Lock()
 
     def _auth_headers(self) -> dict[str, str]:
         if self._tenant_token:
             return {"Authorization": f"Bearer {self._tenant_token}"}
         return {}
+
+    async def _ensure_tenant_token(self) -> None:
+        """动态模式：缺 token 或快过期时拿 app_id/app_secret 换一次。"""
+        if not (self._app_id and self._app_secret):
+            # 静态模式 / 测试 mock — 由调用方保证 _tenant_token 已可用或不需要 auth。
+            return
+        if self._tenant_token and time.time() < self._tenant_token_expires_at:
+            return
+        async with self._token_lock:
+            if self._tenant_token and time.time() < self._tenant_token_expires_at:
+                return
+            resp = await self._client.post(
+                TENANT_TOKEN_PATH,
+                json={"app_id": self._app_id, "app_secret": self._app_secret},
+            )
+            if resp.status_code != 200:
+                raise LarkAPIError(resp.status_code, resp.text)
+            data = resp.json()
+            if data.get("code", 0) != 0 or not isinstance(data.get("tenant_access_token"), str):
+                raise LarkAPIError(resp.status_code, resp.text)
+            new_token = str(data["tenant_access_token"])
+            expire_seconds = data.get("expire", TENANT_TOKEN_DEFAULT_EXPIRE_SECONDS)
+            try:
+                ttl = max(60, int(expire_seconds) - TENANT_TOKEN_REFRESH_LEAD_SECONDS)
+            except (TypeError, ValueError):
+                ttl = TENANT_TOKEN_DEFAULT_EXPIRE_SECONDS - TENANT_TOKEN_REFRESH_LEAD_SECONDS
+            self._tenant_token = new_token
+            self._tenant_token_expires_at = time.time() + ttl
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -225,7 +271,10 @@ class LarkClient:
         last_exc: Exception | None = None
         for attempt in range(self._max_retries):
             try:
-                resp = await self._client.request(method, path, json=json, params=params)
+                await self._ensure_tenant_token()
+                resp = await self._client.request(
+                    method, path, json=json, params=params, headers=self._auth_headers()
+                )
             except (httpx.TimeoutException, httpx.ConnectError) as exc:
                 last_exc = exc
                 await self._backoff(attempt)

@@ -24,7 +24,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # 5 分钟 replay window — 见 research.md §1
 SIGNATURE_REPLAY_WINDOW_SECONDS = 300
-SCHEDULE_PATH = "/api/v1/schedules"
+# httpx 的 base_url 会把 path 整段作为前缀；这里只写相对路径，避免与
+# config.flashduty.schedule_api_base 中已有的 /api/v1 双重叠加。
+SCHEDULE_PATH = "/schedules"
 DEFAULT_TIMEOUT_SECONDS = 5.0
 
 
