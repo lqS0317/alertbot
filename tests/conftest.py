@@ -80,6 +80,7 @@ _TEST_YAML = textwrap.dedent(
       base_url: "http://am.test:9093"
       service_account_token_env: "TEST_AM_TOKEN"
       request_timeout_seconds: 5
+      webhook_token_env: "TEST_AM_WEBHOOK_TOKEN"
     oncall:
       priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
       incident_label_key: "lark_user"
@@ -102,12 +103,23 @@ _TEST_YAML = textwrap.dedent(
 
 # Phase-3 测试用的 secret 环境变量（必填以便 verify_signature 取值）
 _FD_SECRET_VALUE = "fd-test-secret-shared"
+_AM_WEBHOOK_TOKEN_VALUE = "am-test-token-shared"
 
 
 @pytest.fixture
 def fd_secret(monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setenv("TEST_FD_SECRET", _FD_SECRET_VALUE)
     return _FD_SECRET_VALUE
+
+
+@pytest.fixture
+def am_webhook_token(monkeypatch: pytest.MonkeyPatch) -> str:
+    """把入站 Alertmanager webhook 的共享 token 注入到 TEST_AM_WEBHOOK_TOKEN。
+
+    与 _TEST_YAML 里的 alertmanager.webhook_token_env 对齐。
+    """
+    monkeypatch.setenv("TEST_AM_WEBHOOK_TOKEN", _AM_WEBHOOK_TOKEN_VALUE)
+    return _AM_WEBHOOK_TOKEN_VALUE
 
 
 @pytest.fixture

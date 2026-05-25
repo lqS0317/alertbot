@@ -21,6 +21,9 @@ alertmanager:
   base_url: "http://localhost:9093"
   service_account_token_env: "AM_TOKEN"
   request_timeout_seconds: 5                  # outbound 默认 5s（Constitution Security）
+  # 入站 webhook 共享 token 环境变量名（Alertmanager → /webhook/am 用 Bearer token 鉴权）。
+  # 留空表示禁用 /webhook/am；设值时必须保证 K8s Secret 注入了同名变量。
+  webhook_token_env: "ALERTBOT_AM_WEBHOOK_TOKEN"
 
 oncall:
   # D 方案 4 层优先级链：先匹配的赢

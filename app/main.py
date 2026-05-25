@@ -25,6 +25,7 @@ from app.clients.lark import LarkClient
 from app.models import Base, make_engine, make_session_factory
 from app.observability import MetaChannelReporter, MetricsRegistry, get_logger
 from app.services.oncall import OncallResolver
+from app.webhooks import alertmanager as am_webhook
 from app.webhooks import flashduty as fd_webhook
 from app.webhooks import lark as lark_webhook
 
@@ -168,6 +169,7 @@ def create_app() -> FastAPI:
 
     app.include_router(fd_webhook.router)
     app.include_router(lark_webhook.router)
+    app.include_router(am_webhook.router)
     return app
 
 

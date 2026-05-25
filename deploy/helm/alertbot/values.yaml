@@ -60,6 +60,7 @@ config:
   alertmanager:
     base_url: ""
     request_timeout_seconds: 5
+    webhook_token_env: "ALERTBOT_AM_WEBHOOK_TOKEN"
 
 # secret 引用 — 实际值在 SealedSecret/Vault；不要把真值放这里。
 secrets:
@@ -69,6 +70,7 @@ secrets:
   fdWebhookSecret: "FD_WEBHOOK_SECRET"
   fdApiToken: "FD_API_TOKEN"
   amToken: "AM_TOKEN"
+  amWebhookToken: "ALERTBOT_AM_WEBHOOK_TOKEN"
   databaseUrl: "DATABASE_URL"
 
 env:

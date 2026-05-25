@@ -20,6 +20,7 @@ data:
       base_url: {{ .Values.config.alertmanager.base_url | quote }}
       service_account_token_env: {{ .Values.secrets.amToken | quote }}
       request_timeout_seconds: {{ .Values.config.alertmanager.request_timeout_seconds }}
+      webhook_token_env: {{ .Values.config.alertmanager.webhook_token_env | quote }}
     oncall:
       priority_chain: {{ .Values.config.oncall.priority_chain | toJson }}
       incident_label_key: {{ .Values.config.oncall.incident_label_key | quote }}

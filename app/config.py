@@ -49,6 +49,9 @@ class AlertmanagerConfig(_Frozen):
     base_url: str
     service_account_token_env: str
     request_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    # 入站 webhook（Alertmanager → AlertBot）共享 token 环境变量名。
+    # 用于 Authorization: Bearer <token> 鉴权；空值表示未启用入站 webhook。
+    webhook_token_env: str = ""
 
 
 OncallTier = Literal["incident_label", "fd_schedule", "static_map", "fallback_role"]
