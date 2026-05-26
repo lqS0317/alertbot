@@ -409,7 +409,20 @@ def verify_lark_signature(
 
 
 def _check_replay_window(timestamp_header: str, now: int | None) -> None:
-    """v2 规范的 timestamp 容忍 秒/毫秒/微秒/浮点 4 种格式，归一化到秒后校验 ±5min 窗口。"""
+    """尽力解析 timestamp 做 ±5min replay window 校验。
+
+    支持的格式：unix 秒/毫秒/微秒/浮点；其它格式（如飞书后端实际观察到的 Go
+    time.String() 输出 "2026-05-26 18:18:51.682... CST m=+..."）**软失败**：
+    跳过本校验，把判真伪的责任完全交给签名比对。
+
+    设计权衡：
+      - 签名本身（带 secret 的 SHA1/SHA256）就能防伪造，是强校验。
+      - replay window 只是冗余保险（防止攻击者拦截一条历史合法请求重放）。
+      - 我们另外有 audit_log idempotency（按 event_id/dedup_key 去重），能挡掉
+        重放后的重复业务执行；少这一层校验对端到端正确性无影响。
+      - 反之，如果飞书把不标准的 timestamp 发过来就一律 401，会让合法回调直接
+        丢失（SDL "宁可降级也不阻断"原则）。
+    """
     raw_ts = timestamp_header.strip()
     try:
         if "." in raw_ts:
@@ -422,10 +435,8 @@ def _check_replay_window(timestamp_header: str, now: int | None) -> None:
                 ts = n // 1_000
             else:
                 ts = n
-    except (ValueError, TypeError) as exc:
-        raise LarkSignatureError(
-            f"timestamp not parseable: {timestamp_header!r}"
-        ) from exc
+    except (ValueError, TypeError):
+        return  # 格式不识别 → 跳过 replay window 校验，签名负责防伪
     current = now if now is not None else int(time.time())
     if abs(current - ts) > LARK_SIGNATURE_REPLAY_WINDOW_SECONDS:
         raise LarkSignatureError(
