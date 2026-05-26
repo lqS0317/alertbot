@@ -52,12 +52,22 @@ def _headers(secret: str, body: bytes, ts: int | None = None, nonce: str = "n") 
 
 
 def _encrypt(encrypt_key: str, body: bytes) -> bytes:
+    """飞书 Encrypt Key 加密规范：随机 16 字节 IV 拼在密文前。
+
+    历史 bug 测试里用了 key[:16] 作 IV，刚好"自洽地"测过了同样错的解密实现；
+    修复 decrypt 之后，加密辅助也要对齐规范，否则握手永远跑不通。
+    """
+    import os as _os
+
     key = hashlib.sha256(encrypt_key.encode()).digest()
+    iv = _os.urandom(16)
     pad = 16 - (len(body) % 16)
     padded = body + bytes([pad]) * pad
-    cipher = Cipher(algorithms.AES(key), modes.CBC(key[:16]))
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
     enc = cipher.encryptor().update(padded) + cipher.encryptor().finalize()
-    return json.dumps({"encrypt": base64.b64encode(enc).decode()}, separators=(",", ":")).encode()
+    return json.dumps(
+        {"encrypt": base64.b64encode(iv + enc).decode()}, separators=(",", ":")
+    ).encode()
 
 
 def test_lark_signature_happy_path_reaches_handler(

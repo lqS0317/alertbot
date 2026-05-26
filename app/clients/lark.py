@@ -368,14 +368,34 @@ def verify_lark_signature(
 
 
 def decrypt_lark_body_if_needed(*, encrypt_key: str, body: bytes) -> bytes:
-    """If body is `{"encrypt": "..."}`, decrypt AES-CBC with sha256(encrypt_key)."""
+    """飞书 Encrypt Key 解密（与官方 SDK 一致）。
+
+    协议：
+        cipher_b64 = json(body)["encrypt"]
+        cipher_bin = base64decode(cipher_b64)
+        key        = SHA256(encrypt_key)                # 32 bytes，AES-256
+        iv         = cipher_bin[:16]                    # ← 飞书规范：IV 在密文头 16 字节
+        ciphertext = cipher_bin[16:]
+        plain_pad  = AES-256-CBC-decrypt(ciphertext, key, iv)
+        plain      = PKCS#7-unpad(plain_pad)
+
+    历史 bug：曾误用 key[:16] 作为 IV，解密"成功"但内容是垃圾字节，再 decode utf-8
+    时报 UnicodeDecodeError，导致 webhook 收到加密 body 时一律 500（包括
+    url_verification 握手）。
+    """
     raw = json.loads(body.decode("utf-8"))
     if not isinstance(raw, dict) or "encrypt" not in raw:
         return body
-    encrypted = base64.b64decode(str(raw["encrypt"]))
+    cipher_bin = base64.b64decode(str(raw["encrypt"]))
+    if len(cipher_bin) < 16:
+        raise LarkSignatureError("encrypted body too short to contain IV")
     key = hashlib.sha256(encrypt_key.encode()).digest()
-    cipher = Cipher(algorithms.AES(key), modes.CBC(key[:16]))
-    padded = cipher.decryptor().update(encrypted) + cipher.decryptor().finalize()
+    iv = cipher_bin[:16]
+    ciphertext = cipher_bin[16:]
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    padded = cipher.decryptor().update(ciphertext) + cipher.decryptor().finalize()
+    if not padded:
+        raise LarkSignatureError("empty plaintext after decrypt")
     pad = padded[-1]
     if pad < 1 or pad > 16:
         raise LarkSignatureError("invalid encrypted padding")
