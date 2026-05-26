@@ -53,9 +53,12 @@ class OncallRecipient:
         if self.kind == "user":
             if self.user_id:
                 return f"<at id={self.user_id}></at>"
+            # 故意 NOT 使用 `<at email=…></at>`：飞书会对 email 做存在性校验，配置里拼错
+            # 一个邮箱字符就会让整张卡 400 拒收（ErrCode 100290 "invalid user resource"），
+            # 把告警直接打丢。降级为纯文本邮箱：飞书永远接受，运维肉眼也能看出谁配错了，
+            # 且应用日志里有 lark_lookup_user_by_email_not_found warning 辅助定位。
             if self.email:
-                # 自定义机器人无通讯录权限时这里会渲染失败，但至少能让用户在卡片上看到邮箱。
-                return f"<at email={self.email}></at>"
+                return self.email
         if self.kind == "role" and self.role is not None:
             return self.role
         return self.email or self.role or "@on-call"
@@ -113,24 +116,31 @@ class OncallResolver:
             elif tier == "static_map":
                 target = await self._from_static_map(alert)
             elif tier == "fallback_role":
-                target = OncallTarget(
-                    source="fallback_role",
-                    recipients=tuple(
-                        OncallRecipient(kind="role", role=role) for role in cfg.oncall.fallback_role
-                    ),
-                )
+                target = await self._build_fallback_target(cfg.oncall.fallback_role)
             else:  # pragma: no cover - Pydantic Literal prevents this
                 target = None
 
             if target is not None:
                 return target
 
-        return OncallTarget(
-            source="fallback_role",
-            recipients=tuple(
-                OncallRecipient(kind="role", role=role) for role in cfg.oncall.fallback_role
-            ),
-        )
+        return await self._build_fallback_target(cfg.oncall.fallback_role)
+
+    async def _build_fallback_target(self, items: list[str]) -> OncallTarget:
+        """fallback_role 元素自适应：含 '@' → 当 email 走 lookup（飞书 @ 真人卡），
+        否则当 role 字符串文本（如 '@on-call'）。
+
+        让运维可以混用：fallback_role: ["sunyu@hashkey.cloud", "@on-call"]
+        既保证真人被通知，又留一条角色文本兜底（lookup 失败时还能看到文字）。
+        """
+        recipients: list[OncallRecipient] = []
+        for item in items:
+            if "@" in item and "." in item.split("@", 1)[-1]:
+                # 看起来像 email（user@domain.tld）→ 走 lookup 拿 user_id 渲染真 @ 卡
+                recipients.append(await self._recipient_from_email(item))
+            else:
+                # 角色名 / 群组标签 → 当纯文本 role
+                recipients.append(OncallRecipient(kind="role", role=item))
+        return OncallTarget(source="fallback_role", recipients=tuple(recipients))
 
     async def _from_incident_label(self, alert: Alert) -> OncallTarget | None:
         raw = alert.labels.get(get_config().oncall.incident_label_key)
