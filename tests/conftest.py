@@ -122,6 +122,24 @@ def am_webhook_token(monkeypatch: pytest.MonkeyPatch) -> str:
     return _AM_WEBHOOK_TOKEN_VALUE
 
 
+# 飞书新版（schema 2.0）签名 secret 用 Encrypt Key（不是 Verification Token），
+# 测试统一约定 encrypt key = "encrypt-key"、verify token = "verify-secret"，
+# 与 tests/integration/flows/test_us3_silence_helpers.py 的 post_lark 默认 secret 对齐。
+_LARK_ENCRYPT_KEY_VALUE = "encrypt-key"
+_LARK_VERIFY_TOKEN_VALUE = "verify-secret"
+
+
+@pytest.fixture
+def lark_secrets(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """注入 Lark Encrypt Key + Verification Token 到测试 env。"""
+    monkeypatch.setenv("TEST_LARK_ENCRYPT_KEY", _LARK_ENCRYPT_KEY_VALUE)
+    monkeypatch.setenv("TEST_LARK_VERIFY_TOKEN", _LARK_VERIFY_TOKEN_VALUE)
+    return {
+        "encrypt_key": _LARK_ENCRYPT_KEY_VALUE,
+        "verify_token": _LARK_VERIFY_TOKEN_VALUE,
+    }
+
+
 @pytest.fixture
 def write_test_config(tmp_path: Path) -> Path:
     """把 _TEST_YAML 写到 tmp 文件并指向它，返路径。"""
@@ -137,6 +155,7 @@ def fastapi_app_factory(
     tmp_path: Path,
     write_test_config: Path,
     fd_secret: str,
+    lark_secrets: dict[str, str],
 ) -> Iterator[Callable[..., FastAPI]]:
     """构造一个 lifespan 已启动好的 FastAPI 实例，用 MockTransport 注入 Lark 出站。
 

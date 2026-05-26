@@ -60,11 +60,13 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
     token = bind_trace_id(new_trace_id())
     try:
         cfg = get_config()
-        verify_secret = os.environ.get(cfg.lark.verification_token_env, "")
         encrypt_key = os.environ.get(cfg.lark.encrypt_key_env, "")
+        # 飞书新版签名 secret 用 encrypt_key，不是 verification_token（旧版用法）。
+        # verification_token 仅作为 body 内 token 字段的对比凭证（明文场景）；开了
+        # Encrypt Key 的应用都走签名路径，不再需要 verification_token。
         try:
             verify_lark_signature(
-                secret=verify_secret,
+                secret=encrypt_key,
                 body=raw_body,
                 signature_header=request.headers.get("X-Lark-Signature"),
                 timestamp_header=request.headers.get("X-Lark-Request-Timestamp"),

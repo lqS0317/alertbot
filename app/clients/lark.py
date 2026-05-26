@@ -361,8 +361,18 @@ def verify_lark_signature(
     current = now if now is not None else int(time.time())
     if abs(current - ts) > LARK_SIGNATURE_REPLAY_WINDOW_SECONDS:
         raise LarkSignatureError("timestamp outside replay window")
-    msg = f"{timestamp_header}{nonce_header}".encode() + body
-    expected = base64.b64encode(hmac.new(secret.encode(), msg, hashlib.sha256).digest()).decode()
+    # 飞书新版 schema 2.0 卡片回调（card.action.trigger）+ 事件订阅签名规范：
+    #   bytes_b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
+    #   bytes_b  = bytes_b1 + body
+    #   signature = SHA256(bytes_b).hexdigest()    ← 普通 SHA256，不是 HMAC
+    # 注意：
+    #   - secret 这里应该传 ENCRYPT_KEY（不是 Verification Token），因为飞书新版
+    #     用 encrypt_key 作为签名密钥，verification_token 仅用于回调 body 内部
+    #     的 token 字段二次校验（明文场景）。
+    #   - 输出是 hex digest，不是 base64。
+    # 参考: https://open.feishu.cn/document/event-subscription-guide/callback-subscription/receive-and-handle-callbacks
+    msg = (timestamp_header + nonce_header + secret).encode("utf-8") + body
+    expected = hashlib.sha256(msg).hexdigest()
     if not hmac.compare_digest(signature_header, expected):
         raise LarkSignatureError("signature mismatch")
 

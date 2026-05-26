@@ -17,8 +17,9 @@ from fastapi.testclient import TestClient
 
 
 def _sign(secret: str, timestamp: str, nonce: str, body: bytes) -> str:
-    msg = f"{timestamp}{nonce}".encode() + body
-    return base64.b64encode(hmac.new(secret.encode(), msg, hashlib.sha256).digest()).decode()
+    """飞书新版签名规范：SHA256((timestamp + nonce + encrypt_key).utf8() + body).hex()"""
+    msg = (timestamp + nonce + secret).encode("utf-8") + body
+    return hashlib.sha256(msg).hexdigest()
 
 
 def _card_action_body(event_id: str = "evt-sig-1") -> bytes:
@@ -74,11 +75,13 @@ def test_lark_signature_happy_path_reaches_handler(
     fastapi_app_factory: Callable[..., FastAPI],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # 飞书新版签名 secret 是 ENCRYPT_KEY，不是 VERIFY_TOKEN（旧版用法）。
     monkeypatch.setenv("TEST_LARK_VERIFY_TOKEN", "verify-secret")
+    monkeypatch.setenv("TEST_LARK_ENCRYPT_KEY", "encrypt-key")
     body = _card_action_body()
     app = fastapi_app_factory(lark_handler=lambda _: httpx.Response(200))
     with TestClient(app) as client:
-        r = client.post("/webhook/lark", content=body, headers=_headers("verify-secret", body))
+        r = client.post("/webhook/lark", content=body, headers=_headers("encrypt-key", body))
     assert r.status_code == 200, r.text
 
 
@@ -89,14 +92,15 @@ def test_lark_signature_failures_return_401(
     case: str,
 ) -> None:
     monkeypatch.setenv("TEST_LARK_VERIFY_TOKEN", "verify-secret")
+    monkeypatch.setenv("TEST_LARK_ENCRYPT_KEY", "encrypt-key")
     body = _card_action_body()
-    headers = _headers("verify-secret", body)
+    headers = _headers("encrypt-key", body)
     if case == "missing":
         headers.pop("X-Lark-Signature")
     elif case == "tampered":
         headers["X-Lark-Signature"] = "bad"
     elif case == "stale":
-        headers = _headers("verify-secret", body, ts=int(time.time()) - 600)
+        headers = _headers("encrypt-key", body, ts=int(time.time()) - 600)
 
     app = fastapi_app_factory(lark_handler=lambda _: httpx.Response(200))
     with TestClient(app) as client:
@@ -117,6 +121,6 @@ def test_lark_encrypted_payload_happy_path(
         r = client.post(
             "/webhook/lark",
             content=encrypted_body,
-            headers=_headers("verify-secret", encrypted_body),
+            headers=_headers("encrypt-key", encrypted_body),
         )
     assert r.status_code == 200, r.text

@@ -17,9 +17,10 @@ from app.models import Alert, AlertState
 
 
 def sign_lark(secret: str, body: bytes, ts: int | None = None, nonce: str = "n") -> dict[str, str]:
+    """飞书新版签名（与 verify_lark_signature 对齐）：SHA256((ts+nonce+key)+body).hex()"""
     timestamp = str(ts or int(time.time()))
-    msg = f"{timestamp}{nonce}".encode() + body
-    sig = base64.b64encode(hmac.new(secret.encode(), msg, hashlib.sha256).digest()).decode()
+    msg = (timestamp + nonce + secret).encode("utf-8") + body
+    sig = hashlib.sha256(msg).hexdigest()
     return {
         "Content-Type": "application/json",
         "X-Lark-Request-Timestamp": timestamp,
@@ -53,7 +54,9 @@ def silence_body(
     ).encode()
 
 
-def post_lark(client: TestClient, body: bytes, secret: str = "verify-secret") -> httpx.Response:
+def post_lark(client: TestClient, body: bytes, secret: str = "encrypt-key") -> httpx.Response:
+    """飞书新版签名 secret = Encrypt Key（不是 Verification Token）。默认对齐
+    conftest.lark_secrets 注入的 TEST_LARK_ENCRYPT_KEY 值。"""
     return client.post("/webhook/lark", content=body, headers=sign_lark(secret, body))
 
 
