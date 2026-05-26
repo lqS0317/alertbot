@@ -354,13 +354,35 @@ def verify_lark_signature(
 ) -> None:
     if not signature_header or not timestamp_header or not nonce_header:
         raise LarkSignatureError("missing signature headers")
+    # 飞书新版 X-Lark-Request-Timestamp 可能是：
+    #   - 秒级整数字符串 "1612238989"      （旧版事件订阅）
+    #   - 毫秒级整数字符串 "1612238989123" （schema 2.0 部分场景）
+    #   - 微秒级整数字符串 "1612238989123456"
+    #   - 浮点字符串 "1612238989.123"      （也观察到过）
+    # 统一归一化到秒级整数用于 replay window 校验；签名拼接仍用 raw timestamp 字符串
+    # （飞书签名算法用原始 header 文本拼接，不能归一化）。
+    raw_ts = timestamp_header.strip()
     try:
-        ts = int(timestamp_header)
-    except ValueError as exc:
-        raise LarkSignatureError("timestamp not an integer") from exc
+        if "." in raw_ts:
+            ts = int(float(raw_ts))
+        else:
+            n = int(raw_ts)
+            if n > 10**14:  # 微秒
+                ts = n // 1_000_000
+            elif n > 10**11:  # 毫秒
+                ts = n // 1_000
+            else:  # 秒
+                ts = n
+    except (ValueError, TypeError) as exc:
+        raise LarkSignatureError(
+            f"timestamp not parseable: {timestamp_header!r}"
+        ) from exc
     current = now if now is not None else int(time.time())
     if abs(current - ts) > LARK_SIGNATURE_REPLAY_WINDOW_SECONDS:
-        raise LarkSignatureError("timestamp outside replay window")
+        raise LarkSignatureError(
+            f"timestamp outside replay window (current={current}, ts={ts}, "
+            f"raw={timestamp_header!r})"
+        )
     # 飞书新版 schema 2.0 卡片回调（card.action.trigger）+ 事件订阅签名规范：
     #   bytes_b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
     #   bytes_b  = bytes_b1 + body
