@@ -49,7 +49,9 @@ def test_render_user_mention_from_oncall_target() -> None:
 
     payload = render_firing(make_alert(), oncall_target=target)
 
-    assert '<at user_id="ou_bob">Bob</at>' in _all_content(payload)
+    # 飞书互动卡 lark_md 的 @ 用户语法：<at id=ou_xxx></at>（属性名 id、值不带引号、
+    # 标签内为空，名字由飞书后端按 id 自动渲染）。
+    assert "<at id=ou_bob></at>" in _all_content(payload)
 
 
 def test_render_role_mention_from_fallback_target() -> None:
@@ -85,7 +87,7 @@ def test_render_multiple_user_mentions_from_oncall_target() -> None:
     payload = render_firing(make_alert(), oncall_target=target)
     content = _all_content(payload)
 
-    assert '<at user_id="ou_alice">Alice</at> <at user_id="ou_bob">Bob</at>' in content
+    assert "<at id=ou_alice></at> <at id=ou_bob></at>" in content
 
 
 def test_render_without_target_preserves_us1_no_mention_behavior() -> None:

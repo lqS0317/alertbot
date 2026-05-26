@@ -36,10 +36,26 @@ class OncallRecipient:
     role: str | None = None
 
     def mention_text(self) -> str:
-        """Return Lark mention syntax or role fallback text."""
-        if self.kind == "user" and self.user_id is not None:
-            name = self.display_name or self.email or self.user_id
-            return f'<at user_id="{self.user_id}">{name}</at>'
+        """Return Lark interactive-card lark_md mention syntax or fallback text.
+
+        飞书互动卡片 lark_md 标签里 @ 用户的正确语法（与 IM 消息体里的
+        `<at user_id="…">Name</at>` **不同**）：
+          - 用 open_id / user_id：`<at id=ou_xxx></at>`（属性名是 `id`，值不带引号，
+            标签内必须为空 — 名字由飞书后端按 id 自动渲染）
+          - 用 email（仅自建/商店应用）：`<at email=xxx@xxx.com></at>`
+        其它属性名（含 `user_id="…"`）或在标签内塞 name，会被飞书当未知 HTML 直接
+        丢弃，导致 "On-call" 区块下方空白。
+
+        参考：
+          https://open.feishu.cn/document/ukTMukTMukTM/uADOwUjLwgDM14CM4ATN
+          https://open.feishu.cn/document/common-capabilities/message-card/message-cards-content/using-markdown-tags
+        """
+        if self.kind == "user":
+            if self.user_id:
+                return f"<at id={self.user_id}></at>"
+            if self.email:
+                # 自定义机器人无通讯录权限时这里会渲染失败，但至少能让用户在卡片上看到邮箱。
+                return f"<at email={self.email}></at>"
         if self.kind == "role" and self.role is not None:
             return self.role
         return self.email or self.role or "@on-call"
