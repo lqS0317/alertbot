@@ -351,27 +351,76 @@ def verify_lark_signature(
     timestamp_header: str | None,
     nonce_header: str | None,
     now: int | None = None,
+    verification_token: str | None = None,
 ) -> None:
+    """同时支持飞书两套签名规范，自动识别：
+
+    - **新版 v2**（事件订阅 / "卡片回传交互"新版回调）：
+        cipher_b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
+        signature = SHA256(cipher_b1 + body).hexdigest()         ← 64 字符 hex
+        body 通常是加密 `{"encrypt": "..."}` 形态
+        timestamp 是 unix 秒/毫秒/微秒整数字符串
+
+    - **旧版 v1**（"消息卡片回调" / "卡片回传交互（旧版）"）：
+        cipher_b1 = (timestamp + nonce + verification_token).encode("utf-8")
+        signature = SHA1(cipher_b1 + body).hexdigest()           ← 40 字符 hex
+        body 是明文 JSON
+        timestamp 是 Go time.String() 格式（带纳秒 + monotonic 后缀），不严格做 unix 校验
+
+    自动判别：按 signature 长度（40=SHA1/旧版，64=SHA256/新版）选规范。
+    secret 形参承担 encrypt_key（v2 必用）；verification_token 形参承担 v1 secret。
+    任何一种规范的 secret 缺失 → 该规范分支直接判失败（避免空 secret 误通过）。
+
+    参考：
+      v1 https://open.feishu.cn/document/common-capabilities/message-card/add-card-interaction/message-card-security-verification
+      v2 https://open.feishu.cn/document/event-subscription-guide/callback-subscription/receive-and-handle-callbacks
+    """
     if not signature_header or not timestamp_header or not nonce_header:
         raise LarkSignatureError("missing signature headers")
-    # 飞书新版 X-Lark-Request-Timestamp 可能是：
-    #   - 秒级整数字符串 "1612238989"      （旧版事件订阅）
-    #   - 毫秒级整数字符串 "1612238989123" （schema 2.0 部分场景）
-    #   - 微秒级整数字符串 "1612238989123456"
-    #   - 浮点字符串 "1612238989.123"      （也观察到过）
-    # 统一归一化到秒级整数用于 replay window 校验；签名拼接仍用 raw timestamp 字符串
-    # （飞书签名算法用原始 header 文本拼接，不能归一化）。
+
+    sig_len = len(signature_header)
+    if sig_len == 64:
+        # 新版 v2：SHA256 + encrypt_key
+        if not secret:
+            raise LarkSignatureError("encrypt_key not configured for v2 (SHA256) callback")
+        # 仅 v2 严格做 replay window 校验（timestamp 是规范的 unix 字符串）。
+        _check_replay_window(timestamp_header, now)
+        msg = (timestamp_header + nonce_header + secret).encode("utf-8") + body
+        expected = hashlib.sha256(msg).hexdigest()
+    elif sig_len == 40:
+        # 旧版 v1：SHA1 + verification_token
+        # 旧版 timestamp 是 Go time.String() 格式（如 `2026-05-26 18:04:53.518 +0800 CST m=+78696`），
+        # 不能 int 解析；但签名拼接用 raw 字符串没问题。飞书旧版规范没要求严格 replay window
+        # 校验（签名本身防伪即可），所以这里跳过时间窗口校验。
+        token = verification_token or ""
+        if not token:
+            raise LarkSignatureError(
+                "verification_token not configured for v1 (SHA1) callback"
+            )
+        msg = (timestamp_header + nonce_header + token).encode("utf-8") + body
+        expected = hashlib.sha1(msg, usedforsecurity=False).hexdigest()
+    else:
+        raise LarkSignatureError(
+            f"unrecognized signature length {sig_len} (expected 40 for SHA1 / 64 for SHA256)"
+        )
+
+    if not hmac.compare_digest(signature_header, expected):
+        raise LarkSignatureError("signature mismatch")
+
+
+def _check_replay_window(timestamp_header: str, now: int | None) -> None:
+    """v2 规范的 timestamp 容忍 秒/毫秒/微秒/浮点 4 种格式，归一化到秒后校验 ±5min 窗口。"""
     raw_ts = timestamp_header.strip()
     try:
         if "." in raw_ts:
             ts = int(float(raw_ts))
         else:
             n = int(raw_ts)
-            if n > 10**14:  # 微秒
+            if n > 10**14:
                 ts = n // 1_000_000
-            elif n > 10**11:  # 毫秒
+            elif n > 10**11:
                 ts = n // 1_000
-            else:  # 秒
+            else:
                 ts = n
     except (ValueError, TypeError) as exc:
         raise LarkSignatureError(
@@ -380,23 +429,8 @@ def verify_lark_signature(
     current = now if now is not None else int(time.time())
     if abs(current - ts) > LARK_SIGNATURE_REPLAY_WINDOW_SECONDS:
         raise LarkSignatureError(
-            f"timestamp outside replay window (current={current}, ts={ts}, "
-            f"raw={timestamp_header!r})"
+            f"timestamp outside replay window (current={current}, ts={ts})"
         )
-    # 飞书新版 schema 2.0 卡片回调（card.action.trigger）+ 事件订阅签名规范：
-    #   bytes_b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
-    #   bytes_b  = bytes_b1 + body
-    #   signature = SHA256(bytes_b).hexdigest()    ← 普通 SHA256，不是 HMAC
-    # 注意：
-    #   - secret 这里应该传 ENCRYPT_KEY（不是 Verification Token），因为飞书新版
-    #     用 encrypt_key 作为签名密钥，verification_token 仅用于回调 body 内部
-    #     的 token 字段二次校验（明文场景）。
-    #   - 输出是 hex digest，不是 base64。
-    # 参考: https://open.feishu.cn/document/event-subscription-guide/callback-subscription/receive-and-handle-callbacks
-    msg = (timestamp_header + nonce_header + secret).encode("utf-8") + body
-    expected = hashlib.sha256(msg).hexdigest()
-    if not hmac.compare_digest(signature_header, expected):
-        raise LarkSignatureError("signature mismatch")
 
 
 def decrypt_lark_body_if_needed(*, encrypt_key: str, body: bytes) -> bytes:

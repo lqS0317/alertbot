@@ -61,6 +61,7 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
     try:
         cfg = get_config()
         encrypt_key = os.environ.get(cfg.lark.encrypt_key_env, "")
+        verification_token = os.environ.get(cfg.lark.verification_token_env, "")
         sig_header = request.headers.get("X-Lark-Signature")
         ts_header = request.headers.get("X-Lark-Request-Timestamp")
         nonce_header = request.headers.get("X-Lark-Request-Nonce")
@@ -91,6 +92,7 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
         try:
             verify_lark_signature(
                 secret=encrypt_key,
+                verification_token=verification_token,
                 body=raw_body,
                 signature_header=sig_header,
                 timestamp_header=ts_header,
