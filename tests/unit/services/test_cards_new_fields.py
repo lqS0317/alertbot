@@ -134,6 +134,16 @@ def test_render_firing_renders_env_field() -> None:
     assert "**🌐 环境**：ops" in flat
 
 
+def test_render_firing_renders_service_field_independently_of_title() -> None:
+    """服务名虽然在标题尾巴也会出现，但运维要的是字段表里独立一行（颜色/字号
+    都更醒目），便于第一屏定位是哪个服务挂了。
+    """
+    payload = render_firing(_make_alert())
+    flat = json.dumps(payload, ensure_ascii=False)
+
+    assert "**🔧 服务**：kube-prometheus-stack" in flat
+
+
 def test_render_firing_renders_runbook_link_from_annotations() -> None:
     payload = render_firing(_make_alert())
     flat = json.dumps(payload, ensure_ascii=False)

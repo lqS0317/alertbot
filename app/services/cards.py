@@ -219,6 +219,7 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
     elements: list[dict[str, Any]] = [
         _field_row("🧩", "集群", cluster),
         _field_row("🌐", "环境", env),
+        _field_row("🔧", "服务", alert.service or _FIELD_FALLBACK),
         _field_row("🔥", "严重程度", severity_text),
         _field_row("⏰", "触发时间", when_str),
         _field_row("📍", "告警对象", target or _FIELD_FALLBACK),
