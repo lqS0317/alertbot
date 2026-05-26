@@ -25,6 +25,10 @@ import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.observability import get_logger
+
+_log = get_logger("alertbot.clients.lark")
+
 POST_CARD_PATH = "/open-apis/im/v1/messages?receive_id_type=chat_id"
 PATCH_CARD_PATH_TPL = "/open-apis/im/v1/messages/{message_id}"
 USER_BY_ID_PATH_TPL = "/open-apis/contact/v3/users/{user_id}"
@@ -225,9 +229,16 @@ class LarkClient:
         return email
 
     async def lookup_user_by_email(self, email: str) -> tuple[str, str] | None:
-        """email → (user_id, display_name)，用于卡片 @-mention 渲染。"""
-        if email in self._user_by_email:
-            return self._user_by_email[email]
+        """email → (user_id, display_name)，用于卡片 @-mention 渲染。
+
+        缓存策略：**只缓存成功结果，不缓存 None**。失败（API 报错 / code!=0 /
+        响应里没找到对应用户）每次都重试，避免历史失败粘住导致权限/可见性已经修
+        复后仍然走 email 兜底。失败成本是一次 HTTP 调用，可控；粘住的成本是
+        永久看不到 @ 卡。
+        """
+        cached = self._user_by_email.get(email) if email in self._user_by_email else "MISS"
+        if cached != "MISS" and cached is not None:
+            return cached  # type: ignore[return-value]
 
         # 飞书 batch_get_id 是 POST JSON body；用 GET 会被路由成 `/users/{open_id}`，
         # 进而把 `batch_get_id` 当成 open_id 报 99992351。
@@ -235,15 +246,34 @@ class LarkClient:
             resp = await self._send_with_retry(
                 "POST", USER_BATCH_GET_ID_PATH, json={"emails": [email]}
             )
-        except LarkAPIError:
+        except LarkAPIError as exc:
             # 通讯录权限缺失 / 用户不存在等不应阻断告警卡片；调用方会退化展示邮箱文本。
-            self._user_by_email[email] = None
+            _log.warning(
+                "lark_lookup_user_by_email_api_error",
+                email=email,
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
             return None
         data = resp.json()
         if data.get("code", 0) != 0:
-            self._user_by_email[email] = None
+            _log.warning(
+                "lark_lookup_user_by_email_code_nonzero",
+                email=email,
+                code=data.get("code"),
+                msg=data.get("msg"),
+            )
             return None
         user = _extract_user_by_email(data, email)
+        if user is None:
+            # API 返回 code=0 但 user_list 里没有匹配 → 可能权限不足看不到该用户、
+            # 或 email 拼写不一致。打 warning 让运维一眼定位。
+            _log.warning(
+                "lark_lookup_user_by_email_not_found",
+                email=email,
+                response_data=data.get("data"),
+            )
+            return None
         self._user_by_email[email] = user
         return user
 
