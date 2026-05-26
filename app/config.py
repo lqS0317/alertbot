@@ -94,6 +94,35 @@ class SilenceButtonsConfig(_Frozen):
     enable_custom: bool = True
 
 
+class CardLinkRewrite(_Frozen):
+    """generator_url 前缀替换规则。
+
+    Alertmanager / vmalert 推过来的 generatorURL 通常是 K8s 内部域名（如
+    http://vmalert-ops-859f5b67-cgzk7:8080/...），外网/办公网无法直接打开。
+    通过一组前缀替换把内部地址改写成可访问的外部域名。
+
+    按顺序应用，第一个 prefix 命中即用；不匹配的链接原样保留。
+    """
+
+    from_prefix: str = Field(..., alias="from")
+    to_prefix: str = Field(..., alias="to")
+
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+
+class CardLinksConfig(_Frozen):
+    """卡片上链接相关的配置（runbook 兜底 + 监控链接重写）。"""
+
+    runbook_default_url: str = ""
+    generator_url_rewrites: list[CardLinkRewrite] = Field(default_factory=list)
+
+
+class CardsConfig(_Frozen):
+    """卡片渲染相关的配置（链接重写 / 链接兜底 / 后续可扩展 label key 映射）。"""
+
+    links: CardLinksConfig = Field(default_factory=CardLinksConfig)
+
+
 class AlertBotConfig(_Frozen):
     lark: LarkConfig
     flashduty: FlashdutyConfig
@@ -103,6 +132,7 @@ class AlertBotConfig(_Frozen):
     silence_buttons: SilenceButtonsConfig
     timezone: str
     max_silence_hours: int = Field(default=24, ge=1, le=24)
+    cards: CardsConfig = Field(default_factory=CardsConfig)
 
 
 # ───────────────────────── loader ──────────────────────────────────

@@ -38,6 +38,9 @@ class Incident(BaseModel):
     severity: str
     summary: str
     labels: dict[str, Any] = Field(default_factory=dict)
+    # Alertmanager annotations（如 description / runbook_url / summary）+ 内部派生字段
+    # （如 __generator_url）。FlashDuty 原生 webhook 没有 annotations，留空 dict 即可。
+    annotations: dict[str, Any] = Field(default_factory=dict)
     started_at: datetime | None = None
 
 

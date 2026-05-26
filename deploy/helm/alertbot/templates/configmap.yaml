@@ -33,3 +33,9 @@ data:
       enable_custom: {{ .Values.config.silence_buttons.enable_custom }}
     timezone: {{ .Values.config.timezone | quote }}
     max_silence_hours: {{ .Values.config.max_silence_hours }}
+{{- if .Values.config.cards }}
+    cards:
+      links:
+        runbook_default_url: {{ .Values.config.cards.links.runbook_default_url | default "" | quote }}
+        generator_url_rewrites: {{ .Values.config.cards.links.generator_url_rewrites | default list | toJson }}
+{{- end }}

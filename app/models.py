@@ -84,6 +84,12 @@ class Alert(Base):
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     labels: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    annotations: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+    )
     lark_message_id: Mapped[str] = mapped_column(String(64), nullable=False)
     state: Mapped[AlertState] = mapped_column(
         Enum(AlertState, name="alert_state"),

@@ -55,3 +55,17 @@ timezone: "Asia/Shanghai"
 
 # 24h 是硬上限（FR-017 / SC-008）；改大会被 Pydantic schema 拒绝。
 max_silence_hours: 24
+
+# 卡片渲染相关
+cards:
+  links:
+    # 当告警 annotations 里没有 runbook_url 时，卡片"📖 处理手册"行用这个兜底。
+    # 留空 → 该行显示 "-"，不渲染链接。
+    runbook_default_url: ""
+    # generatorURL 前缀重写（Alertmanager/vmalert 的 generatorURL 通常是 K8s 内部
+    # 域名，办公网点不开）。按顺序匹配，第一个命中即用；都没命中保持原样。
+    generator_url_rewrites: []
+    #   - from: "http://vmalert-ops-859f5b67-cgzk7:8080"
+    #     to:   "https://vmalert.ops.example.com"
+    #   - from: "http://vmalert-prod"
+    #     to:   "https://vmalert.prod.example.com"

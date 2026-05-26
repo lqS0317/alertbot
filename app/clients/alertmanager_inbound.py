@@ -41,6 +41,7 @@ class AlertmanagerInboundAlert(BaseModel):
     starts_at: datetime | None = Field(default=None, alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     fingerprint: str | None = None
+    generator_url: str | None = Field(default=None, alias="generatorURL")
 
 
 class AlertmanagerInboundPayload(BaseModel):
@@ -102,12 +103,17 @@ def alert_to_event(alert: AlertmanagerInboundAlert) -> FlashDutyEvent:
         or alert.labels.get("alertname")
         or "alert"
     )
+    annotations: dict[str, Any] = dict(alert.annotations)
+    if alert.generator_url:
+        # generatorURL 不是 Alertmanager 的 annotation；用 __ 前缀避免和真实 annotation 冲突。
+        annotations["__generator_url"] = alert.generator_url
     incident = Incident(
         fingerprint=fingerprint,
         service=service,
         severity=severity,
         summary=summary,
         labels=dict(alert.labels),
+        annotations=annotations,
         started_at=alert.starts_at,
     )
     event_type: Literal["incident.created", "incident.closed"] = (
