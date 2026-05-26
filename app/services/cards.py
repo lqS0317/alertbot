@@ -111,13 +111,22 @@ def _pick_label(labels: dict[str, Any], keys: tuple[str, ...]) -> str | None:
 
 
 def _field_row(emoji: str, label: str, value: str) -> dict[str, Any]:
-    """渲染一条 emoji + 加粗标签 + 值 的字段行（lark_md div）。"""
+    """渲染一条 emoji + 加粗标签 + 值 的字段行（schema v2 markdown 组件）。
+
+    为什么用 markdown 而不是 div + lark_md：
+      飞书互动卡片 schema 2.0 下，`<at id=…></at>` / `<person id=…></person>` 这些
+      用户提及标签 **只在 tag=markdown 的组件里被渲染成蓝色 @ 卡**；在 div+lark_md
+      文本元素里会被当成未知 HTML 标签丢弃，最终只显示 email 兜底文本。
+
+      官方文档（CN 站）："富文本（Markdown）组件" 章节明确说 markdown 才是
+      schema 2.0 推荐的富文本载体，含完整 markdown + 飞书扩展标签支持。
+
+      额外好处：markdown 组件结构更扁平（无嵌套 text），后续要加图标、行间样式
+      也更直接。
+    """
     return {
-        "tag": "div",
-        "text": {
-            "tag": "lark_md",
-            "content": f"**{emoji} {label}**：{value}",
-        },
+        "tag": "markdown",
+        "content": f"**{emoji} {label}**：{value}",
     }
 
 
@@ -305,11 +314,8 @@ def _silence_select_static(alert_fingerprint: str) -> list[dict[str, Any]]:
         )
     return [
         {
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": "**⏱️ 静默时间**",
-            },
+            "tag": "markdown",
+            "content": "**⏱️ 静默时间**",
         },
         {
             "tag": "select_static",
