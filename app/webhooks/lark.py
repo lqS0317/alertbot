@@ -67,6 +67,13 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
         from app.observability import get_logger as _gl
 
         _diag = _gl("alertbot.webhooks.lark")
+        # 打出所有 X-* 和 Lark/Tt/Trace 相关 header，定位飞书新版到底用什么 header 名
+        all_relevant_headers = {
+            k: v
+            for k, v in request.headers.items()
+            if k.lower().startswith(("x-", "lark-", "tt-", "trace-"))
+            or k.lower() in ("timestamp", "signature", "nonce")
+        }
         _diag.info(
             "lark_webhook_sig_diag",
             has_encrypt_key=bool(encrypt_key),
@@ -76,6 +83,7 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
             nonce=nonce_header,
             body_len=len(raw_body),
             body_first_64=raw_body[:64].decode("utf-8", errors="replace"),
+            all_relevant_headers=all_relevant_headers,
         )
         # 飞书新版签名 secret 用 encrypt_key，不是 verification_token（旧版用法）。
         # verification_token 仅作为 body 内 token 字段的对比凭证（明文场景）；开了
