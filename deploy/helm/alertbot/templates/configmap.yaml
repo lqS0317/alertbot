@@ -12,6 +12,7 @@ data:
       verification_token_env: {{ .Values.secrets.larkVerifyToken | quote }}
       group_chat_id: {{ .Values.config.lark.group_chat_id | quote }}
       meta_channel_id: {{ .Values.config.lark.meta_channel_id | quote }}
+      routes: {{ .Values.config.lark.routes | default list | toJson }}
     flashduty:
       webhook_secret_env: {{ .Values.secrets.fdWebhookSecret | quote }}
       schedule_api_base: {{ .Values.config.flashduty.schedule_api_base | quote }}

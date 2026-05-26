@@ -9,8 +9,21 @@ lark:
   app_secret_env: "LARK_APP_SECRET"
   encrypt_key_env: "LARK_ENCRYPT_KEY"
   verification_token_env: "LARK_VERIFY_TOKEN"
-  group_chat_id: "oc_xxxxxxxxxxxxxxxx"        # 收告警卡片的群
+  group_chat_id: "oc_xxxxxxxxxxxxxxxx"        # 兜底告警群（routes 都不命中时用）
   meta_channel_id: "oc_yyyyyyyyyyyyyyyy"      # 收运维异常上报的群（CP-VI）
+  # 按 alert.labels 路由到不同的飞书群：first-match-wins，全不命中走 group_chat_id。
+  # 每条 route 的 match 是 AND（所有 key/value 都必须精确等于 alert label）。
+  routes: []
+    # - match:
+    #     cluster: "hsk-ops-infra"
+    #   chat_id: "oc_ops_alerts"
+    # - match:
+    #     env: "prod"
+    #     severity: "critical"             # 多 key 必须全部命中
+    #   chat_id: "oc_prod_critical"
+    # - match:
+    #     alertgroup: "kubernetes-resources"
+    #   chat_id: "oc_k8s_alerts"
 
 flashduty:
   webhook_secret_env: "FD_WEBHOOK_SECRET"

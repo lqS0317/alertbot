@@ -30,6 +30,31 @@ class _Frozen(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class LarkRoute(_Frozen):
+    """一条按 alert.labels 路由到飞书群的规则。
+
+    语义：
+      - `match` 里所有 key/value 都必须精确等于 alert.labels 对应键 → 命中
+      - 路由表 first-match-wins（顺序敏感）
+      - 都不命中 → 走 LarkConfig.group_chat_id 兜底
+      - 单目标：一条 alert 只发到一个 chat（避免 silence/resolved 跨群协调复杂度）
+    """
+
+    match: dict[str, str] = Field(default_factory=dict)
+    chat_id: str
+
+    @field_validator("match")
+    @classmethod
+    def _no_empty_match(cls, value: dict[str, str]) -> dict[str, str]:
+        if not value:
+            # 空 match 等价于"无条件匹配"，会让后面所有 route 永远不可达；几乎肯定是配置错误。
+            raise ValueError(
+                "LarkRoute.match must be non-empty; "
+                "use lark.group_chat_id for the catch-all fallback instead."
+            )
+        return value
+
+
 class LarkConfig(_Frozen):
     app_id: str
     app_secret_env: str
@@ -37,6 +62,7 @@ class LarkConfig(_Frozen):
     verification_token_env: str
     group_chat_id: str
     meta_channel_id: str
+    routes: list[LarkRoute] = Field(default_factory=list)
 
 
 class FlashdutyConfig(_Frozen):

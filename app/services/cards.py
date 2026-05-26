@@ -146,6 +146,26 @@ def _rewrite_url(url: str, rewrites: list[Any]) -> str:
     return url
 
 
+def resolve_chat_id(labels: dict[str, Any]) -> str:
+    """根据 alert.labels 选定目标飞书群（FR-routing）。
+
+    遍历 cfg.lark.routes：第一条所有 match key/value 都精确等于 labels 对应值的
+    route 命中即用；都不命中走 cfg.lark.group_chat_id 兜底。
+
+    设计取舍：
+      - first-match-wins 让顺序成为优先级表达手段，避免 N-to-1 排重。
+      - 精确匹配而非正则：99% 场景够用、配置错误不会变"误投递"。
+      - 单目标：一条 alert 对应一个 chat_id，与 Alert.lark_message_id 1:1，
+        保持 silence/resolved patch 流程不变（不需要 alert_messages 子表）。
+      - labels 缺少 match 中的 key → 该 route 不命中（不会误判为 ""）。
+    """
+    cfg = get_config()
+    for route in cfg.lark.routes:
+        if all(labels.get(k) == v for k, v in route.match.items()):
+            return route.chat_id
+    return cfg.lark.group_chat_id
+
+
 def _safe_link(text: str, url: str) -> str:
     """渲染 lark_md 链接，限制只允许 http/https；其它一律退化为纯文本，杜绝
     `javascript:` / 私有 scheme 的潜在风险，对齐安全默认策略。"""
@@ -395,8 +415,7 @@ async def handle_firing(
     所以这里直接做业务，不再做去重判断。
     """
     incident: Incident = event.incident
-    cfg = get_config()
-    chat_id = cfg.lark.group_chat_id
+    chat_id = resolve_chat_id(dict(incident.labels))
 
     # 先建一个未持久化的 Alert 用于渲染（lark_message_id 还不知道）。
     alert_for_render = Alert(
@@ -461,13 +480,14 @@ async def handle_resolved(
         await lark.patch_card(message_id=row.lark_message_id, card_payload=payload)
     except MessageNotFoundError:
         # FR-011 fallback：原卡丢了 → 发新卡 + 通知 meta-channel。
-        cfg = get_config()
+        # 重新跑 routing：保持和当初 firing 一致的目标群，避免 fallback 卡发错地方。
+        fallback_chat_id = resolve_chat_id(dict(row.labels or {}))
         fallback = render_resolved(row)
         # 在 header 标记一下，让群里看出来发生了 fallback
         fallback["header"]["title"]["content"] = "⚠️ [Original card lost] " + str(
             fallback["header"]["title"]["content"]
         )
-        new_id = await lark.post_card(chat_id=cfg.lark.group_chat_id, card_payload=fallback)
+        new_id = await lark.post_card(chat_id=fallback_chat_id, card_payload=fallback)
         await reporter.report(
             "lark_message_not_found_fallback_card_posted",
             details={
