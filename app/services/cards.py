@@ -11,6 +11,7 @@ US2 会扩 render_firing 支持 oncall_target；US3 加 render_silenced + 6 按�
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -132,16 +133,27 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
 
 
 def _silence_actions(alert_fingerprint: str) -> list[dict[str, Any]]:
-    """Render silence durations as a single overflow dropdown (schema v2)."""
+    """Render silence durations as a single overflow dropdown (schema v2).
+
+    Lark interactive card v2 要求 action.value 是字符串（非 object），否则后端报
+    `expected string for value` 直接 400。所以这里把结构化 payload 用紧凑 JSON
+    序列化，回调端再 json.loads 还原。
+    """
     cfg = get_config()
+
+    def _encode(payload: dict[str, Any]) -> str:
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
     options: list[dict[str, Any]] = [
         {
             "text": {"tag": "plain_text", "content": duration},
-            "value": {
-                "kind": "silence",
-                "alert_fingerprint": alert_fingerprint,
-                "duration": duration,
-            },
+            "value": _encode(
+                {
+                    "kind": "silence",
+                    "alert_fingerprint": alert_fingerprint,
+                    "duration": duration,
+                }
+            ),
         }
         for duration in cfg.silence_buttons.fixed_durations
     ]
@@ -149,10 +161,12 @@ def _silence_actions(alert_fingerprint: str) -> list[dict[str, Any]]:
         options.append(
             {
                 "text": {"tag": "plain_text", "content": "Custom"},
-                "value": {
-                    "kind": "custom_open",
-                    "alert_fingerprint": alert_fingerprint,
-                },
+                "value": _encode(
+                    {
+                        "kind": "custom_open",
+                        "alert_fingerprint": alert_fingerprint,
+                    }
+                ),
             }
         )
     return [

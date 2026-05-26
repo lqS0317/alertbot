@@ -82,7 +82,9 @@ class _LarkOperator(BaseModel):
 
 class _LarkAction(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    value: dict[str, Any] = Field(default_factory=dict)
+    # Lark 互动卡 v2 schema 要求 action.value 是字符串（紧凑 JSON）；为了兼容历史
+    # 单元测试 / 早期手工 dict 形态，这里同时接受 dict。
+    value: dict[str, Any] | str = Field(default_factory=dict)
 
 
 class _LarkActionPayload(BaseModel):
@@ -359,7 +361,20 @@ def parse_lark_action_event(payload: dict[str, Any]) -> LarkActionEvent:
     user_id = operator.user_id or operator.open_id
     if not user_id:
         raise ValueError("operator.user_id/open_id missing")
-    value = action.value
+    # Lark v2 schema 下 action.value 是字符串（紧凑 JSON）。同时容忍历史 dict 形态。
+    raw_value = action.value
+    if isinstance(raw_value, str):
+        if not raw_value:
+            value: dict[str, Any] = {}
+        else:
+            try:
+                decoded = json.loads(raw_value)
+            except (ValueError, json.JSONDecodeError):
+                # 非 JSON 字符串 → 退化成只带 kind 的扁平 payload，避免 500
+                decoded = {"kind": raw_value}
+            value = decoded if isinstance(decoded, dict) else {}
+    else:
+        value = raw_value
     return LarkActionEvent(
         event_id=parsed.header.event_id,
         operator_user_id=user_id,

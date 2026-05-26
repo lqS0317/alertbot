@@ -99,14 +99,17 @@ def test_render_without_target_preserves_us1_no_mention_behavior() -> None:
 def test_render_firing_includes_silence_action_buttons() -> None:
     payload = render_firing(make_alert())
     flat = json.dumps(payload, ensure_ascii=False)
+    # Lark v2 schema 要求 overflow option 的 value 是字符串（紧凑 JSON），所以这里
+    # 先对包裹层 unescape 再做子串断言，确保结构化字段确实落进了序列化后的 payload。
+    unescaped = flat.replace('\\"', '"')
 
     assert '"tag": "action"' not in flat  # schema v2 不再使用 action 容器
     assert '"tag": "overflow"' in flat
     for duration in ["5min", "30min", "1h", "4h", "24h"]:
-        assert f'"duration": "{duration}"' in flat
-        assert '"kind": "silence"' in flat
-    assert '"kind": "custom_open"' in flat
-    assert '"alert_fingerprint": "fp-card-mention"' in flat
+        assert f'"duration":"{duration}"' in unescaped
+    assert '"kind":"silence"' in unescaped
+    assert '"kind":"custom_open"' in unescaped
+    assert '"alert_fingerprint":"fp-card-mention"' in unescaped
 
 
 def test_render_firing_skips_empty_oncall_block() -> None:
