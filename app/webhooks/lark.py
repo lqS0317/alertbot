@@ -61,6 +61,22 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
     try:
         cfg = get_config()
         encrypt_key = os.environ.get(cfg.lark.encrypt_key_env, "")
+        sig_header = request.headers.get("X-Lark-Signature")
+        ts_header = request.headers.get("X-Lark-Request-Timestamp")
+        nonce_header = request.headers.get("X-Lark-Request-Nonce")
+        from app.observability import get_logger as _gl
+
+        _diag = _gl("alertbot.webhooks.lark")
+        _diag.info(
+            "lark_webhook_sig_diag",
+            has_encrypt_key=bool(encrypt_key),
+            encrypt_key_len=len(encrypt_key),
+            sig_header_prefix=(sig_header or "")[:12],
+            ts=ts_header,
+            nonce=nonce_header,
+            body_len=len(raw_body),
+            body_first_64=raw_body[:64].decode("utf-8", errors="replace"),
+        )
         # 飞书新版签名 secret 用 encrypt_key，不是 verification_token（旧版用法）。
         # verification_token 仅作为 body 内 token 字段的对比凭证（明文场景）；开了
         # Encrypt Key 的应用都走签名路径，不再需要 verification_token。
@@ -68,12 +84,17 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
             verify_lark_signature(
                 secret=encrypt_key,
                 body=raw_body,
-                signature_header=request.headers.get("X-Lark-Signature"),
-                timestamp_header=request.headers.get("X-Lark-Request-Timestamp"),
-                nonce_header=request.headers.get("X-Lark-Request-Nonce"),
+                signature_header=sig_header,
+                timestamp_header=ts_header,
+                nonce_header=nonce_header,
             )
             decrypted_body = decrypt_lark_body_if_needed(encrypt_key=encrypt_key, body=raw_body)
         except (LarkSignatureError, json.JSONDecodeError) as exc:
+            _diag.warning(
+                "lark_webhook_sig_failed",
+                reason=str(exc),
+                error_type=type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"error": "signature", "reason": str(exc)},
