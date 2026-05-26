@@ -35,7 +35,24 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
     raw_body = await request.body()
     body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
 
-    # CP-VIII：url_verification 必须最优先匹配，且不需要任何签名头。
+    # CP-VIII：url_verification 握手必须最优先匹配，且不校验签名（飞书后台保存
+    # 回调 URL 时发的握手 body 不带签名头）。
+    # 但如果应用在飞书后台开启了 "加密策略" (Encrypt Key)，飞书发来的握手 body
+    # 会被加密成 {"encrypt": "..."} 格式，没有 type 字段，必须先解密才能看到
+    # type=url_verification。所以这里先尝试解密，再判断 type。
+    if isinstance(body, dict) and "encrypt" in body:
+        cfg_for_handshake = get_config()
+        encrypt_key_for_handshake = os.environ.get(cfg_for_handshake.lark.encrypt_key_env, "")
+        if encrypt_key_for_handshake:
+            try:
+                decrypted_handshake = decrypt_lark_body_if_needed(
+                    encrypt_key=encrypt_key_for_handshake, body=raw_body
+                )
+                body = json.loads(decrypted_handshake.decode("utf-8"))
+            except (LarkSignatureError, json.JSONDecodeError):
+                # 解密失败留给后面签名校验分支处理（也会 401，但起码 trace 信息一致）
+                pass
+
     if isinstance(body, dict) and body.get("type") == "url_verification":
         challenge = body.get("challenge", "")
         return {"challenge": challenge}
