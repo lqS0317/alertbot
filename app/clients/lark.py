@@ -89,6 +89,12 @@ class _LarkAction(BaseModel):
     # Lark 互动卡 v2 schema 要求 action.value 是字符串（紧凑 JSON）；为了兼容历史
     # 单元测试 / 早期手工 dict 形态，这里同时接受 dict。
     value: dict[str, Any] | str = Field(default_factory=dict)
+    # JSON 2.0 select_static（未放入 form 容器）会把选项回调值放到 option，
+    # 而不是 value。form 容器内则可能放在 form_value[name]。
+    option: str | None = None
+    options: list[str] | None = None
+    name: str | None = None
+    form_value: dict[str, Any] = Field(default_factory=dict)
 
 
 class _LarkActionPayload(BaseModel):
@@ -488,8 +494,17 @@ def parse_lark_action_event(payload: dict[str, Any]) -> LarkActionEvent:
     user_id = operator.user_id or operator.open_id
     if not user_id:
         raise ValueError("operator.user_id/open_id missing")
-    # Lark v2 schema 下 action.value 是字符串（紧凑 JSON）。同时容忍历史 dict 形态。
-    raw_value = action.value
+    # Lark v2 schema 下按钮回调使用 action.value；select_static 未嵌入 form 容器时
+    # 使用 action.option；嵌入 form 容器时使用 action.form_value[name]。
+    # 三者里的值都可能是紧凑 JSON 字符串，统一走同一套解码逻辑。
+    raw_value: Any = action.value if action.value else None
+    if raw_value is None and action.option:
+        raw_value = action.option
+    if raw_value is None and action.name and action.name in action.form_value:
+        raw_value = action.form_value.get(action.name)
+    if raw_value is None and action.options:
+        raw_value = action.options[0] if action.options else None
+
     if isinstance(raw_value, str):
         if not raw_value:
             value: dict[str, Any] = {}
@@ -500,8 +515,10 @@ def parse_lark_action_event(payload: dict[str, Any]) -> LarkActionEvent:
                 # 非 JSON 字符串 → 退化成只带 kind 的扁平 payload，避免 500
                 decoded = {"kind": raw_value}
             value = decoded if isinstance(decoded, dict) else {}
-    else:
+    elif isinstance(raw_value, dict):
         value = raw_value
+    else:
+        value = {}
     return LarkActionEvent(
         event_id=parsed.header.event_id,
         operator_user_id=user_id,
