@@ -76,7 +76,7 @@ def _severity_color(severity: str) -> str:
 # - 集群：labels["cluster"]
 # - 环境：labels["env"]
 # - 告警规则名（标题用）：labels["alertname"]
-# - 告警对象：labels["instance"] → labels["host"] → labels["target"]
+# - 告警对象：labels["instance"] → labels["pod"] → labels["node"] → labels["host"] → labels["target"]
 # - 故障描述：annotations["description"]（fallback annotations["summary"] / Incident.summary）
 # - 处理手册：annotations["runbook_url"]（fallback cfg.cards.links.runbook_default_url）
 # - 查看监控：annotations["__generator_url"]（由 alertmanager_inbound.alert_to_event 注入），
@@ -85,7 +85,7 @@ def _severity_color(severity: str) -> str:
 _CLUSTER_LABEL_KEY = "cluster"
 _ENV_LABEL_KEY = "env"
 _ALERTNAME_LABEL_KEY = "alertname"
-_TARGET_LABEL_KEYS: tuple[str, ...] = ("instance", "host", "target")
+_TARGET_LABEL_KEYS: tuple[str, ...] = ("instance", "pod", "node", "host", "target")
 _DESCRIPTION_ANNOTATION_KEYS: tuple[str, ...] = ("description", "summary")
 _RUNBOOK_ANNOTATION_KEY = "runbook_url"
 _GENERATOR_URL_ANNOTATION_KEY = "__generator_url"

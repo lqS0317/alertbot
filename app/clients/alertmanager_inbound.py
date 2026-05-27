@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import re
 import time
 from datetime import datetime
 from typing import Any, Literal
@@ -20,6 +21,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.clients.flashduty import FlashDutyEvent, Incident
+
+_DESCRIPTION_SERVICE_RE = re.compile(
+    r"""(?:^|\n)\s*服务\s*[:：]\s*["']?(?P<service>[^"'\n]+?)["']?\s*(?:\n|$)"""
+)
 
 
 class TokenError(Exception):
@@ -95,7 +100,7 @@ def parse_payload(body: bytes) -> AlertmanagerInboundPayload:
 def alert_to_event(alert: AlertmanagerInboundAlert) -> FlashDutyEvent:
     """把单条 Alertmanager alert 适配成内部 FlashDutyEvent，复用下游 handler。"""
     fingerprint = alert.fingerprint or _compute_fingerprint(alert.labels)
-    service = alert.labels.get("service") or alert.labels.get("alertname") or "unknown"
+    service = _service_for(alert)
     severity = alert.labels.get("severity") or "info"
     summary = (
         alert.annotations.get("summary")
@@ -125,6 +130,28 @@ def alert_to_event(alert: AlertmanagerInboundAlert) -> FlashDutyEvent:
         timestamp=int(time.time()),
         incident=incident,
     )
+
+
+def _service_for(alert: AlertmanagerInboundAlert) -> str:
+    """推导卡片中的服务名。
+
+    优先使用结构化 label；部分现有规则没有 service label，但会在 description 里写
+    `服务: "..."`，此时从 annotation 中提取；最后才 fallback 到 alertname。
+    """
+    for key in ("service", "job", "app", "component"):
+        value = alert.labels.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for key in ("description", "summary"):
+        value = alert.annotations.get(key)
+        if not isinstance(value, str):
+            continue
+        match = _DESCRIPTION_SERVICE_RE.search(value)
+        if match:
+            service = match.group("service").strip()
+            if service:
+                return service
+    return alert.labels.get("alertname") or "unknown"
 
 
 def dedup_key_for(alert: AlertmanagerInboundAlert) -> str:

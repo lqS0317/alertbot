@@ -76,6 +76,48 @@ def test_alert_to_event_falls_back_to_alertname_when_service_missing() -> None:
     assert event.incident.service == "DiskFull"
 
 
+def test_alert_to_event_extracts_service_from_description_before_alertname() -> None:
+    body = json.dumps(
+        {
+            "alerts": [
+                _alert(
+                    labels={"alertname": "P0-op_batcher_default_txmgr_current_nonce", "severity": "critical"},
+                    annotations={
+                        "summary": "P0-op_batcher_default_txmgr_current_nonce",
+                        "description": '服务: "hsk-chain-testnet_hsk-batcher"\n原因: "nonce发生了异常: 1.000"',
+                    },
+                )
+            ]
+        }
+    ).encode("utf-8")
+    payload = parse_payload(body)
+    event = alert_to_event(payload.alerts[0])
+
+    assert event.incident.service == "hsk-chain-testnet_hsk-batcher"
+
+
+def test_alert_to_event_prefers_service_label_over_description() -> None:
+    body = json.dumps(
+        {
+            "alerts": [
+                _alert(
+                    labels={
+                        "alertname": "HighCPU",
+                        "service": "payment-api",
+                        "job": "kubelet",
+                        "severity": "warning",
+                    },
+                    annotations={"description": '服务: "from-description"'},
+                )
+            ]
+        }
+    ).encode("utf-8")
+    payload = parse_payload(body)
+    event = alert_to_event(payload.alerts[0])
+
+    assert event.incident.service == "payment-api"
+
+
 def test_alert_to_event_default_severity_info_when_missing() -> None:
     body = json.dumps(
         {"alerts": [_alert(labels={"alertname": "X", "service": "svc"})]}
