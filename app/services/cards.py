@@ -471,10 +471,11 @@ async def handle_resolved(
     reporter: MetaChannelReporter,
     event: FlashDutyEvent,
 ) -> Alert | None:
-    """incident.closed 处理：SELECT alert → patch_card → UPDATE state.
+    """incident.closed 处理：SELECT alert → PATCH 原卡 + POST 恢复新卡 → UPDATE state.
 
     找不到对应 alert（极罕见 — 收到 closed 但没收到 created）→ meta-channel 报告并返 None.
-    PATCH 收到 404（FR-011）→ post 一张 [Original card lost] 卡 + meta-channel.
+    正常路径：原 firing/silenced 卡 patch 为 resolved，同时新发一张 resolved 卡提醒群里。
+    PATCH 收到 404（FR-011）→ 原卡丢失，只 post 一张 [Original card lost] resolved 卡 + meta-channel.
     """
     incident: Incident = event.incident
     row = (
@@ -491,18 +492,19 @@ async def handle_resolved(
         return None
 
     payload = render_resolved(row)
+    resolved_chat_id = resolve_chat_id(dict(row.labels or {}))
+    resolved_message_id: str | None = None
     try:
         await lark.patch_card(message_id=row.lark_message_id, card_payload=payload)
     except MessageNotFoundError:
         # FR-011 fallback：原卡丢了 → 发新卡 + 通知 meta-channel。
-        # 重新跑 routing：保持和当初 firing 一致的目标群，避免 fallback 卡发错地方。
-        fallback_chat_id = resolve_chat_id(dict(row.labels or {}))
         fallback = render_resolved(row)
         # 在 header 标记一下，让群里看出来发生了 fallback
         fallback["header"]["title"]["content"] = "⚠️ [Original card lost] " + str(
             fallback["header"]["title"]["content"]
         )
-        new_id = await lark.post_card(chat_id=fallback_chat_id, card_payload=fallback)
+        new_id = await lark.post_card(chat_id=resolved_chat_id, card_payload=fallback)
+        resolved_message_id = new_id
         await reporter.report(
             "lark_message_not_found_fallback_card_posted",
             details={
@@ -512,10 +514,18 @@ async def handle_resolved(
             },
         )
         row.lark_message_id = new_id
+    else:
+        # 恢复是一条值得单独提醒的事件：原卡 patch 表示生命周期闭环，新卡用于在群底部提醒。
+        resolved_message_id = await lark.post_card(chat_id=resolved_chat_id, card_payload=payload)
 
     row.state = AlertState.resolved
     await session.commit()
-    _log.info("alert_resolved", fingerprint=incident.fingerprint)
+    _log.info(
+        "alert_resolved",
+        fingerprint=incident.fingerprint,
+        original_message_id=row.lark_message_id,
+        resolved_message_id=resolved_message_id,
+    )
     return row
 
 

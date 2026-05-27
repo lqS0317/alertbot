@@ -117,7 +117,7 @@ def test_resolved_after_firing_patches_same_card(
         r2 = _post(client, _payload([_resolved_alert()]), am_webhook_token)
         assert r2.status_code == 200, r2.text
 
-    assert posts == 1
+    assert posts == 2
     assert len(patches) == 1
 
     async def _state() -> str:

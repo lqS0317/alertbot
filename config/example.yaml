@@ -13,17 +13,17 @@ lark:
   meta_channel_id: "oc_yyyyyyyyyyyyyyyy"      # 收运维异常上报的群（CP-VI）
   # 按 alert.labels 路由到不同的飞书群：first-match-wins，全不命中走 group_chat_id。
   # 每条 route 的 match 是 AND（所有 key/value 都必须精确等于 alert label）。
-  routes: []
-    # - match:
-    #     cluster: "hsk-ops-infra"
-    #   chat_id: "oc_ops_alerts"
-    # - match:
-    #     env: "prod"
-    #     severity: "critical"             # 多 key 必须全部命中
-    #   chat_id: "oc_prod_critical"
-    # - match:
-    #     alertgroup: "kubernetes-resources"
-    #   chat_id: "oc_k8s_alerts"
+  routes:
+    - match:
+        cluster: "hsk-ops-infra"
+      chat_id: "oc_ops_alerts"
+    - match:
+        env: "prod"
+        severity: "critical"             # 多 key 必须全部命中
+      chat_id: "oc_prod_critical"
+    - match:
+        alertgroup: "kubernetes-resources"
+      chat_id: "oc_k8s_alerts"
 
 flashduty:
   webhook_secret_env: "FD_WEBHOOK_SECRET"
@@ -43,12 +43,15 @@ oncall:
   priority_chain: [incident_label, fd_schedule, static_map, fallback_role]
   # incident_label 策略读取告警 labels 里的哪个 key；该值应为负责人邮箱。
   incident_label_key: "lark_user"
-  # 静态兜底映射 service → 邮箱列表
+  # 静态兜底映射 service → 邮箱列表。service 由 labels.service/job/app/component，
+  # 或 annotations.description 里的 `服务: "..."` 推导。
   static_service_map:
     payment-api: ["alice@company.com", "bob@company.com"]
     auth-svc:    ["carol@company.com"]
-  # 顶层兜底（前三层都没出结果时 @ 这个角色）
-  fallback_role: ["@on-call"]
+  # 顶层兜底（前三层都没出结果时使用）。email 会尝试解析成飞书真实 @ 用户；
+  # lookup 失败会降级为纯文本邮箱，避免拼错一个邮箱导致整张卡被飞书拒收。
+  # role 文本（如 "@on-call"）会按纯文本展示。
+  fallback_role: ["sunyu@company.com", "@on-call"]
   # FlashDuty schedule 缓存 TTL（FR-013 + Constitution I 例外，硬上限 300s）
   schedule_cache_ttl_seconds: 300
 
