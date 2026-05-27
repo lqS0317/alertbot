@@ -112,6 +112,14 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
 
         payload = json.loads(decrypted_body.decode("utf-8"))
         action = parse_lark_action_event(payload)
+        _diag.info(
+            "lark_webhook_action_parsed",
+            kind=action.kind,
+            alert_fingerprint=action.alert_fingerprint,
+            duration=action.duration,
+            event_id=action.event_id,
+            operator_user_id=action.operator_user_id,
+        )
 
         sf = request.app.state.session_factory
         async with sf() as session:
@@ -132,18 +140,38 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
                 actor_lark_user_id=action.operator_user_id,
             )
             if inserted is False:
+                _diag.info(
+                    "lark_webhook_deduped",
+                    event_id=action.event_id,
+                    reason="event_id already in audit_log",
+                )
                 return {"ok": True, "deduped": True}
 
             if action.kind == "custom_open":
                 if not action.alert_fingerprint:
+                    _diag.warning(
+                        "lark_webhook_custom_open_missing_fingerprint",
+                        event_id=action.event_id,
+                    )
                     return {"ok": True, "ignored": action.kind}
                 await request.app.state.lark_client.open_form_modal(
                     alert_fingerprint=action.alert_fingerprint,
                     operator_user_id=action.operator_user_id,
                 )
+                _diag.info(
+                    "lark_webhook_custom_form_opened",
+                    alert_fingerprint=action.alert_fingerprint,
+                )
                 return {"ok": True}
 
             if action.kind != "silence" or not action.alert_fingerprint or not action.duration:
+                _diag.warning(
+                    "lark_webhook_action_ignored",
+                    kind=action.kind,
+                    alert_fingerprint=action.alert_fingerprint,
+                    duration=action.duration,
+                    reason="missing required fields or unsupported kind",
+                )
                 return {"ok": True, "ignored": action.kind}
             try:
                 parse_duration(action.duration)
