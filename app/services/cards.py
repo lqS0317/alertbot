@@ -345,33 +345,26 @@ def _silence_select_static(alert_fingerprint: str) -> list[dict[str, Any]]:
 
 
 def render_resolved(alert: Alert) -> dict[str, Any]:
-    """resolved 卡片 payload — 绿色 header + 原 summary + 解决时间。"""
+    """resolved 卡片 payload — 绿色状态 header + 完整排障上下文。
+
+    恢复是生命周期终态，但排障复盘仍然需要完整上下文；因此与 silenced 一样，
+    保留 firing 卡字段，只在顶部追加恢复状态/恢复时间。
+    """
     when_str = _format_time_in_team_tz(datetime.now(UTC))
     return {
         "schema": "2.0",
         "header": {
             "title": {
                 "tag": "plain_text",
-                "content": f"✅ [RESOLVED] {alert.service}",
+                "content": _alert_title(alert, prefix="✅ [RESOLVED]"),
             },
             "template": RESOLVED_HEADER_COLOR,
         },
         "body": {
             "elements": [
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": f"**Resolved at**\n{when_str}",
-                    },
-                },
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": f"**Original summary**\n{alert.summary}",
-                    },
-                },
+                _field_row("✅", "恢复状态", "已恢复"),
+                _field_row("⏰", "恢复时间", when_str),
+                *_alert_context_elements(alert, include_oncall=False),
             ]
         },
     }

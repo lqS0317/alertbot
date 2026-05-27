@@ -48,6 +48,12 @@ def test_silence_click_creates_am_silence_and_patches_same_card(
         asyncio.run(insert_firing_alert(app.state.session_factory))
         r = post_lark(client, silence_body("evt-us3-1"))
         assert r.status_code == 200, r.text
+        assert r.json() == {
+            "toast": {
+                "type": "info",
+                "content": "正在创建静默，请稍候...",
+            }
+        }
 
         async def _read() -> tuple[str, str, str]:
             async with app.state.session_factory() as session:

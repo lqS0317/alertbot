@@ -13,7 +13,7 @@ import json
 import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
 from app.clients.lark import (
     LarkSignatureError,
@@ -30,8 +30,54 @@ from app.services.cards import handle_silence_click, parse_duration, render_sile
 router = APIRouter(tags=["webhook-lark"])
 
 
+async def _run_silence_click_background(
+    *,
+    app: Any,
+    trace_id: str,
+    event_id: str,
+    alert_fingerprint: str,
+    duration_choice: str,
+    operator_lark_user_id: str,
+) -> None:
+    """后台执行静默业务，避免飞书卡片回调 3s 超时（200341）。
+
+    请求线程只做验签、解密、parse、audit 和基础校验，然后快速返回 toast；
+    这里重新创建 DB session，不能复用请求作用域里的 session。
+    """
+    token = bind_trace_id(trace_id)
+    try:
+        sf = app.state.session_factory
+        async with sf() as session:
+            await handle_silence_click(
+                session=session,
+                lark=app.state.lark_client,
+                alertmanager=app.state.alertmanager_client,
+                reporter=app.state.meta_reporter,
+                event_id=event_id,
+                alert_fingerprint=alert_fingerprint,
+                duration_choice=duration_choice,
+                operator_lark_user_id=operator_lark_user_id,
+            )
+    except Exception as exc:
+        # 背景任务异常不会返回给飞书客户端；必须显式上报 meta-channel，避免静默失败无声。
+        await app.state.meta_reporter.report(
+            "lark_silence_background_task_failed",
+            details={
+                "event_id": event_id,
+                "fingerprint": alert_fingerprint,
+                "duration": duration_choice,
+                "error": str(exc),
+                "type": type(exc).__name__,
+            },
+        )
+    finally:
+        unbind_trace_id(token)
+
+
 @router.post("/webhook/lark")
-async def handle_lark_webhook(request: Request) -> dict[str, Any]:
+async def handle_lark_webhook(
+    request: Request, background_tasks: BackgroundTasks
+) -> dict[str, Any]:
     raw_body = await request.body()
     body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
 
@@ -197,16 +243,15 @@ async def handle_lark_webhook(request: Request) -> dict[str, Any]:
                     )
                 raise HTTPException(status_code=400, detail={"error": "invalid_duration"}) from exc
 
-            await handle_silence_click(
-                session=session,
-                lark=request.app.state.lark_client,
-                alertmanager=request.app.state.alertmanager_client,
-                reporter=request.app.state.meta_reporter,
+            background_tasks.add_task(
+                _run_silence_click_background,
+                app=request.app,
+                trace_id=get_trace_id(),
                 event_id=action.event_id,
                 alert_fingerprint=action.alert_fingerprint,
                 duration_choice=action.duration,
                 operator_lark_user_id=action.operator_user_id,
             )
-        return {"ok": True}
+        return {"toast": {"type": "info", "content": "正在创建静默，请稍候..."}}
     finally:
         unbind_trace_id(token)
