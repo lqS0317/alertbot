@@ -184,6 +184,77 @@ def _safe_link(text: str, url: str) -> str:
     return url or _FIELD_FALLBACK
 
 
+def _alert_title(alert: Alert, *, prefix: str) -> str:
+    """统一生成 firing/silenced 标题，避免状态切换后丢失 alertname/target/service。"""
+    labels = alert.labels or {}
+    inc_short = _short_inc_id(alert.incident_fingerprint)
+    alertname = _pick_label(labels, (_ALERTNAME_LABEL_KEY,))
+    target = _pick_label(labels, _TARGET_LABEL_KEYS)
+
+    title_parts: list[str] = [f"{prefix} INC #{inc_short}"]
+    if alertname:
+        title_parts.append(alertname)
+    if target:
+        title_parts.append(f"/ {target}")
+    title_parts.append(f"- {alert.service}")
+    return " ".join(title_parts)
+
+
+def _alert_context_elements(
+    alert: Alert, *, mention: str | None = None, include_oncall: bool = True
+) -> list[dict[str, Any]]:
+    """完整告警上下文字段，供 firing/silenced 复用。
+
+    这组字段是排障上下文的最小闭环：在哪个集群/环境、哪个服务/对象、严重程度、
+    触发时间、故障描述、处理手册、监控链接、处理人。状态变化（silenced/resolved）
+    不应让这些上下文消失。
+    """
+    cfg = get_config()
+    when_str = _format_time_in_team_tz(alert.created_at)
+    labels = alert.labels or {}
+    annotations = getattr(alert, "annotations", None) or {}
+    target = _pick_label(labels, _TARGET_LABEL_KEYS)
+    cluster = _pick_label(labels, (_CLUSTER_LABEL_KEY,)) or _FIELD_FALLBACK
+    env = _pick_label(labels, (_ENV_LABEL_KEY,)) or _FIELD_FALLBACK
+    severity_text = alert.severity.title()
+    description = (
+        _pick_annotation(annotations, _DESCRIPTION_ANNOTATION_KEYS) or alert.summary or "-"
+    )
+
+    runbook_raw = annotations.get(_RUNBOOK_ANNOTATION_KEY)
+    runbook_url = (
+        runbook_raw.strip()
+        if isinstance(runbook_raw, str) and runbook_raw.strip()
+        else cfg.cards.links.runbook_default_url.strip()
+    )
+    runbook_value = _safe_link("查看 Runbook", runbook_url) if runbook_url else _FIELD_FALLBACK
+
+    generator_raw = annotations.get(_GENERATOR_URL_ANNOTATION_KEY)
+    generator_url = (
+        _rewrite_url(generator_raw.strip(), list(cfg.cards.links.generator_url_rewrites))
+        if isinstance(generator_raw, str) and generator_raw.strip()
+        else ""
+    )
+    generator_value = (
+        _safe_link("在监控系统查看", generator_url) if generator_url else _FIELD_FALLBACK
+    )
+
+    elements: list[dict[str, Any]] = [
+        _field_row("🧩", "集群", cluster),
+        _field_row("🌐", "环境", env),
+        _field_row("🔧", "服务", alert.service or _FIELD_FALLBACK),
+        _field_row("🔥", "严重程度", severity_text),
+        _field_row("⏰", "触发时间", when_str),
+        _field_row("📍", "告警对象", target or _FIELD_FALLBACK),
+        _field_row("🔍", "故障描述", description),
+        _field_row("📖", "处理手册", runbook_value),
+        _field_row("🔗", "查看监控", generator_value),
+    ]
+    if include_oncall:
+        elements.append(_field_row("👨\u200d🚒", "处理人员", mention or _FIELD_FALLBACK))
+    return elements
+
+
 def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> dict[str, Any]:
     """firing 卡片 payload（symbol-rich 模板，schema v2）。
 
@@ -196,67 +267,14 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
     缺失值（如 labels 里没 alertname / instance / cluster）→ 字段值显示 "-"，
     不让卡片出现空白结构歧义。
     """
-    cfg = get_config()
     color = _severity_color(alert.severity)
-    when_str = _format_time_in_team_tz(alert.created_at)
-
-    labels = alert.labels or {}
-    annotations = getattr(alert, "annotations", None) or {}
-    inc_short = _short_inc_id(alert.incident_fingerprint)
-    alertname = _pick_label(labels, (_ALERTNAME_LABEL_KEY,))
-    target = _pick_label(labels, _TARGET_LABEL_KEYS)
-    cluster = _pick_label(labels, (_CLUSTER_LABEL_KEY,)) or _FIELD_FALLBACK
-    env = _pick_label(labels, (_ENV_LABEL_KEY,)) or _FIELD_FALLBACK
-    severity_text = alert.severity.title()
-    description = (
-        _pick_annotation(annotations, _DESCRIPTION_ANNOTATION_KEYS) or alert.summary or "-"
-    )
     mention = (
         oncall_target.mention_text().strip()
         if oncall_target is not None and oncall_target.recipients
         else ""
     ) or _FIELD_FALLBACK
 
-    # 处理手册：payload 优先，缺则用配置兜底。
-    runbook_raw = annotations.get(_RUNBOOK_ANNOTATION_KEY)
-    runbook_url = (
-        runbook_raw.strip()
-        if isinstance(runbook_raw, str) and runbook_raw.strip()
-        else cfg.cards.links.runbook_default_url.strip()
-    )
-    runbook_value = _safe_link("查看 Runbook", runbook_url) if runbook_url else _FIELD_FALLBACK
-
-    # 查看监控：payload 必须存在，再按 cfg.cards.links.generator_url_rewrites 重写主机。
-    generator_raw = annotations.get(_GENERATOR_URL_ANNOTATION_KEY)
-    generator_url = (
-        _rewrite_url(generator_raw.strip(), list(cfg.cards.links.generator_url_rewrites))
-        if isinstance(generator_raw, str) and generator_raw.strip()
-        else ""
-    )
-    generator_value = (
-        _safe_link("在监控系统查看", generator_url) if generator_url else _FIELD_FALLBACK
-    )
-
-    title_parts: list[str] = [f"🚨 INC #{inc_short}"]
-    if alertname:
-        title_parts.append(alertname)
-    if target:
-        title_parts.append(f"/ {target}")
-    title_parts.append(f"- {alert.service}")
-    title = " ".join(title_parts)
-
-    elements: list[dict[str, Any]] = [
-        _field_row("🧩", "集群", cluster),
-        _field_row("🌐", "环境", env),
-        _field_row("🔧", "服务", alert.service or _FIELD_FALLBACK),
-        _field_row("🔥", "严重程度", severity_text),
-        _field_row("⏰", "触发时间", when_str),
-        _field_row("📍", "告警对象", target or _FIELD_FALLBACK),
-        _field_row("🔍", "故障描述", description),
-        _field_row("📖", "处理手册", runbook_value),
-        _field_row("🔗", "查看监控", generator_value),
-        _field_row("👨\u200d🚒", "处理人员", mention),
-    ]
+    elements = _alert_context_elements(alert, mention=mention)
     elements.extend(_silence_select_static(alert.incident_fingerprint))
 
     return {
@@ -264,7 +282,7 @@ def render_firing(alert: Alert, oncall_target: OncallTarget | None = None) -> di
         "header": {
             "title": {
                 "tag": "plain_text",
-                "content": title,
+                "content": _alert_title(alert, prefix="🚨"),
             },
             "template": color,
         },
@@ -362,30 +380,28 @@ def render_resolved(alert: Alert) -> dict[str, Any]:
 def render_silenced(
     alert: Alert, silence: Silence, *, operator_name: str | None = None
 ) -> dict[str, Any]:
-    """silenced 卡片 payload — 灰色 header + 到期时间 + 操作人。"""
+    """silenced 卡片 payload — 灰色状态 header + 完整排障上下文。
+
+    静默是状态变化，不是上下文删除。保留 firing 卡里的所有定位信息（集群/环境/
+    服务/对象/描述/runbook/监控链接），只在顶部追加静默状态、操作人和到期时间；
+    同时移除静默下拉框，避免对同一张已静默卡重复操作。
+    """
     expires = _format_time_in_team_tz(silence.ends_at)
     operator = operator_name or silence.created_by
+    elements: list[dict[str, Any]] = [
+        _field_row("🔕", "静默状态", "已静默"),
+        _field_row("👤", "操作人", operator),
+        _field_row("⏳", "静默到期", expires),
+    ]
+    elements.extend(_alert_context_elements(alert, include_oncall=False))
+
     return {
         "schema": "2.0",
         "header": {
-            "title": {"tag": "plain_text", "content": f"🔕 [SILENCED] {alert.service}"},
+            "title": {"tag": "plain_text", "content": _alert_title(alert, prefix="🔕 [SILENCED]")},
             "template": "grey",
         },
-        "body": {
-            "elements": [
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": f"**Silenced by {operator}**\nExpires at: {expires}",
-                    },
-                },
-                {
-                    "tag": "div",
-                    "text": {"tag": "lark_md", "content": f"**Summary**\n{alert.summary}"},
-                },
-            ]
-        },
+        "body": {"elements": elements},
     }
 
 
@@ -551,6 +567,14 @@ async def handle_silence_click(
             created_by=created_by,
             comment=f"Silenced from Lark by {created_by}",
         )
+        _log.info(
+            "alertmanager_silence_created",
+            fingerprint=alert_fingerprint,
+            alertmanager_silence_id=am_id,
+            duration=duration_choice,
+            created_by=created_by,
+            matcher_count=len(matchers),
+        )
     except Exception as exc:
         await lark.patch_card(
             message_id=alert.lark_message_id,
@@ -583,8 +607,21 @@ async def handle_silence_click(
     session.add(silence)
     alert.state = AlertState.silenced
     await session.commit()
+    _log.info(
+        "alert_silence_persisted",
+        fingerprint=alert_fingerprint,
+        alertmanager_silence_id=am_id,
+        silence_id=silence.id,
+        message_id=alert.lark_message_id,
+    )
     await lark.patch_card(
         message_id=alert.lark_message_id,
         card_payload=render_silenced(alert, silence, operator_name=email or created_by),
+    )
+    _log.info(
+        "lark_silenced_card_patched",
+        fingerprint=alert_fingerprint,
+        alertmanager_silence_id=am_id,
+        message_id=alert.lark_message_id,
     )
     return silence
